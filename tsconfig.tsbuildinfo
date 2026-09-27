@@ -1,0 +1,21 @@
+{
+  "root": [
+    "./src/App.tsx",
+    "./src/main.tsx",
+    "./src/vite-env.d.ts",
+    "./src/components/HeroCarousel.tsx",
+    "./src/components/TrainingView.tsx",
+    "./src/exercises/analyzer.test.ts",
+    "./src/exercises/analyzer.ts",
+    "./src/exercises/types.ts",
+    "./src/hooks/useTraining.ts",
+    "./src/hooks/useVoiceFeedback.ts",
+    "./src/pose/demo.ts",
+    "./src/pose/drawing.ts",
+    "./src/pose/geometry.ts",
+    "./src/pose/landmarks.ts",
+    "./src/pose/poseDetector.ts",
+    "./vite.config.ts"
+  ],
+  "version": "5.9.3"
+}
