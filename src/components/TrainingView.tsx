@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAccount } from '../account/context';
-import { AccountPersistence } from '../account/api';
+import { AccountPersistence, type TrainingPersistence } from '../account/api';
+import type { TrainingGoal } from '../training/session';
 import type { ExerciseType, InputMode, FeedbackCode } from '../exercises/types';
 import { criterionLabels, labels } from '../exercises/types';
 import { criterionTotals, nextTask } from '../exercises/coaching';
@@ -17,6 +18,7 @@ interface Props {
   exercise: ExerciseType;
   mode: InputMode;
   onHome: () => void;
+  programStep?: {goal:TrainingGoal; conditions:string; persistence:TrainingPersistence};
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -26,12 +28,13 @@ function readable(seconds: number) {
   return `${pad(Math.floor(whole / 60))}:${pad(whole % 60)}`;
 }
 
-export function TrainingView({ exercise, mode, onHome }: Props) {
+export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
   const { user } = useAccount();
-  const persistence = useMemo(() => user ? new AccountPersistence(user.id) : undefined, [user?.id]);
+  const accountPersistence = useMemo(() => user ? new AccountPersistence(user.id) : undefined, [user?.id]);
+  const persistence = programStep?.persistence ?? accountPersistence;
   const [videoUrl, setVideoUrl] = useState('');
-  const [goalFields, setGoalFields] = useState({ sets: '', reps: '', restSeconds: '' });
-  const [conditions, setConditions] = useState('');
+  const [goalFields, setGoalFields] = useState(programStep ? {sets:String(programStep.goal.sets),reps:String(programStep.goal.reps),restSeconds:String(programStep.goal.restSeconds)} : { sets: '', reps: '', restSeconds: '' });
+  const [conditions, setConditions] = useState(programStep?.conditions ?? '');
   const goal = { sets: Number(goalFields.sets || NaN), reps: Number(goalFields.reps || NaN), restSeconds: Number(goalFields.restSeconds || NaN) };
   useEffect(
     () => () => {
@@ -67,6 +70,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
     if (!file) return;
     setVideoUrl(URL.createObjectURL(file));
   };
+  if (session && programStep) return <p role='status'>Собираем результат шага…</p>;
   if (session) {
     const result = combineResults(session.sets.map(s => s.result));
     return (
@@ -158,6 +162,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           ◷ <span>{readable(seconds)}</span>
         </div>
       </div>
+      {programStep && !started && <button className='button' disabled={starting} onClick={onHome}>Прервать программу до запуска шага</button>}
       {started && <section className='session-controls' aria-label='Управление сессией'>
         <p role='status'><b>{phaseLabels[phase]}</b> · Подход {setNumber}/{goal.sets} · {phase === 'next' ? `Цель следующего: ${goal.reps} полных` : `В текущем: ${analysis.result.reps}/${goal.reps} полных`}{phase === 'rest' ? ` · осталось ${restSeconds} с` : ''}</p>
         {!accepting && <p>Движения не учитываются, технические подсказки выключены. Перед продолжением снова удерживайте исходную позицию.</p>}
@@ -256,7 +261,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           </div>
         </section>
         <aside className='dashboard'>
-      {!started && <fieldset className='session-goal' disabled={starting}>
+      {!started && <fieldset className='session-goal' disabled={starting || !!programStep}>
         <legend>Твой план</legend>
         <p className='goal-intro'>Цель выбираешь ты. Мы поможем следить за счётом.</p>
         <div className='goal-fields'>
@@ -385,7 +390,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
             disabled={!started}
             onClick={finish}
           >
-            Завершить тренировку <span>↗</span>
+            {programStep ? 'Прервать программу' : 'Завершить тренировку'} <span>↗</span>
           </button>
         </aside>
       </div>

@@ -1,4 +1,36 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+/* Program catalog, session plan and transitions reuse the training tokens. */
+.program-page { max-width:1328px; margin:auto; padding:56px 56px 90px; }
+.program-page h1 { font-size:clamp(34px,4.6vw,60px); font-weight:500; margin:24px 0; overflow-wrap:anywhere; }
+.program-page .page-heading h1 { margin-top:16px; }
+.program-disclaimer { max-width:740px; color:var(--muted); font-size:14px; }
+.program-filters { display:grid; grid-template-columns:2fr 1fr 1fr; gap:16px; padding:24px 0; margin-top:24px; border-block:1px solid var(--border); }
+.program-page label { display:grid; gap:8px; font-size:12px; color:var(--muted); min-width:0; }
+.program-page input,.program-page select { width:100%; min-width:0; padding:12px 14px; border:1px solid var(--border); border-radius:10px; font:inherit; font-size:14px; color:var(--text); background:var(--bg); }
+.program-page select { min-height:48px; }
+.program-filters + p { margin:22px 0; }
+.program-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; }
+.program-card { border:1px solid var(--border); border-radius:20px; padding:24px; background:var(--surface); display:flex; flex-direction:column; min-width:0; }
+.program-card-top { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:30px; }
+.program-card h2 { font-size:25px; letter-spacing:-.7px; overflow-wrap:anywhere; }
+.program-card p { color:var(--muted); font-size:13px; }
+.program-card .button { margin-top:auto; align-self:flex-start; }
+.program-plan { padding:0; border:0; min-width:0; margin:36px 0; }
+.program-plan legend { font-size:24px; font-weight:600; margin-bottom:20px; }
+.program-step { border:1px solid var(--border); border-radius:16px; background:var(--surface); padding:24px; margin:0 0 16px; }
+.program-step h2 { font-size:22px; letter-spacing:-.5px; }.program-step h2 span { margin-right:12px; }
+.program-fields { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+.program-source { padding:24px 0; border-block:1px solid var(--border); margin-bottom:28px; }
+.program-source h2 { font-size:24px; }.program-source p { font-size:14px; color:var(--muted); }.program-source > label { margin-top:20px; max-width:600px; }
+.program-run-banner { max-width:1216px; margin:30px auto 0; padding:22px 28px; border:1px solid var(--border); border-radius:18px; background:var(--surface); display:flex; justify-content:space-between; gap:24px; align-items:center; }
+.program-run-banner h2 { font-size:24px; margin:8px 0; letter-spacing:-.6px; }.program-run-banner p { font-size:12px; margin:0; color:var(--muted); }
+.program-run-banner progress { accent-color:var(--accent); max-width:180px; width:25%; height:8px; }
+.program-transition { min-height:500px; max-width:1000px; }.transition-clock { font-size:64px; font-weight:500; color:var(--accent); letter-spacing:-2px; margin:36px 0; }
+.program-result { margin:28px 0; }.program-result > h2 { font-size:30px; }.program-result > p { color:var(--muted); font-size:13px; }.program-result > details { padding:8px 0; border-block:1px solid var(--border); margin-bottom:24px; }
+.program-result ol { padding-left:24px; color:var(--muted); font-size:13px; }.program-result li { padding:8px 0; }
+.guest-programs { border-top:1px solid var(--border); margin-top:40px; padding-top:28px; }
+@media(max-width:1000px) { .program-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.program-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }.program-run-banner { margin-inline:32px; } }
+@media(max-width:640px) { .program-page { padding:30px 18px 60px; }.program-grid,.program-filters { grid-template-columns:1fr; }.program-filters { gap:14px; }.program-card { padding:22px; }.program-card-top { margin-bottom:22px; }.program-run-banner { margin:20px 18px 0; padding:18px; }.program-run-banner h2 { font-size:19px; }.program-run-banner progress { display:none; }.program-step { padding:18px; }.program-fields { gap:12px; }.program-page .account-actions > .button { flex-grow:1; }.program-result > h2 { font-size:25px; } }
 /* Accounts share the training palette and controls. */
 .account-page, .profile-page { max-width: 1328px; margin: auto; padding: 64px 56px 90px; }
 .account-page { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; }

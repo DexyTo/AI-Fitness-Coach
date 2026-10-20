@@ -15,7 +15,7 @@ import { closeDetector, getDetectorWithMetadata } from '../pose/poseDetector';
 import { VideoTimeline } from '../pose/videoTimeline';
 import { TrainingController, phaseLabels, type SessionPhase, type TrainingGoal, type WorkoutRecord } from '../training/session';
 import { HistoryStore } from '../training/history';
-import { messageOf, type AccountPersistence } from '../account/api';
+import { messageOf, type TrainingPersistence } from '../account/api';
 
 
 interface Options {
@@ -24,7 +24,7 @@ interface Options {
   videoUrl?: string;
   goal: TrainingGoal;
   conditions: string;
-  persistence?: AccountPersistence;
+  persistence?: TrainingPersistence;
 }
 
 export function useTraining({ exercise, mode, videoUrl, goal, conditions, persistence }: Options) {

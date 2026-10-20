@@ -11,6 +11,7 @@ import { labels } from './exercises/types';
 import type { ExerciseType, InputMode } from './exercises/types';
 import { readSelection, selectionSearch } from './routing/selection';
 import './style.css';
+import { ProgramCatalog, ProgramDetails } from './programs/ProgramViews';
 
 export default function App() {
   const { user } = useAccount();
@@ -36,6 +37,7 @@ export default function App() {
       <Link className='brand' to={{ pathname: '/', search }} aria-label='PlayFit Vision — главная'><span className='brand-icon' aria-hidden='true'>✳</span><span>PlayFit<span className='brand-accent'> Vision</span></span></Link>
       <nav aria-label='Основная навигация'>
         <NavLink end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to={{ pathname: '/', search }}>Тренировки</NavLink>
+        <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to='/programs'>Программы</NavLink>
         <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to={{ pathname: '/history', search }}><Icon name='history' />История</NavLink>
       </nav>
       <Link className='account-nav' to={user ? '/profile' : '/login'}>{user ? <><Avatar name={user.avatar} /><span>{user.nickname}</span></> : <><Icon name='shield' /><span>Войти</span></>}</Link>
@@ -45,6 +47,8 @@ export default function App() {
     <Route path='/login' element={<AuthView key='login' />} />
     <Route path='/register' element={<AuthView key='register' register />} />
     <Route path='/profile' element={<ProfileView />} />
+    <Route path='/programs' element={<ProgramCatalog />} />
+    <Route path='/programs/:id' element={<ProgramDetails key={location.pathname} />} />
     <Route path='/history' element={user ? <AccountHistoryView user={user} onHome={() => navigate('home')} /> : <HistoryView onHome={() => navigate('home')} />} />
     <Route path='/history/:id' element={<AccountHistoryDetail />} />
     <Route path='/training' element={<TrainingView key={`${exercise}-${mode}`} exercise={exercise} mode={mode} onHome={() => navigate('home')} />} />

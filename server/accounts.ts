@@ -4,6 +4,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isWorkoutRecord } from '../shared/historyValidation.js';
 import type { WorkoutRecord, TrainingGoal } from '../shared/workout.js';
 import { importSchema, obj, snapshotSchema, workoutSchema } from './workoutSchema.js';
+import { catalog, programRecordSchema, programSnapshotSchema } from './programs.js';
+import { isProgram, same, validPlan, validProgramRecord, type HistoryRecord, type ProgramSnapshot } from '../shared/program.js';
 
 export class ApiError extends Error {
   constructor(readonly statusCode: number, readonly code: string, message: string) { super(message); }
@@ -24,18 +26,23 @@ async function passwordHash(password: string) {
 }
 interface User { id: string; login: string; nickname: string; avatar: string; createdAt: string }
 interface ResultRow { id: string; run_id: string | null; source: string; source_version: number; original_id: string | null; record_json: string; created_at: string; archived_at: string | null }
-type Snapshot = { exercise: WorkoutRecord['exercise']; mode: WorkoutRecord['mode']; goal: TrainingGoal; conditions: string };
+type Snapshot = { exercise: WorkoutRecord['exercise']; mode: WorkoutRecord['mode']; goal: TrainingGoal; conditions: string } | ProgramSnapshot;
 const userColumns = 'u.id, u.login, u.nickname, u.avatar, u.created_at AS createdAt';
 const idSchema = { type: 'string', minLength: 1, maxLength: 128 };
 const credentials = obj({ login: { type: 'string', pattern: '^[a-zA-Z0-9_]{3,32}$' }, password: { type: 'string', minLength: 8, maxLength: 128 } });
 const emptyQuery = obj({});
-const serializedResult = (row: ResultRow) => ({ id: row.id, runId: row.run_id, source: row.source, sourceVersion: row.source_version, originalId: row.original_id, createdAt: row.created_at, archivedAt: row.archived_at, record: JSON.parse(row.record_json) as WorkoutRecord });
+const serializedResult = (row: ResultRow) => ({ id: row.id, runId: row.run_id, source: row.source, sourceVersion: row.source_version, originalId: row.original_id, createdAt: row.created_at, archivedAt: row.archived_at, record: JSON.parse(row.record_json) as HistoryRecord });
 function validateRecord(value: unknown): asserts value is WorkoutRecord {
   if (!isWorkoutRecord(value) || value.sets.reduce((n,s) => n + s.result.attempts.length,0) > 5000 ||
     value.sets.some(s => s.observation.sampledMs > s.durationMs + 1) ||
     value.sets.reduce((n,s) => n + s.durationMs,0) > value.duration * 1000 + 1) fail(400, 'INVALID_RESULT', 'Результат содержит несогласованные показатели.');
 }
 export function registerAccounts(app: FastifyInstance, db: Database.Database) {
+  app.get('/api/programs', { schema:{ querystring:obj({}) } }, async () => ({ programs:catalog(db) }));
+  app.get<{Params:{id:string}}>('/api/programs/:id', {schema:{params:obj({id:idSchema}),querystring:obj({})}}, async req => {
+    const program = catalog(db).find(p => p.id === req.params.id) ?? fail(404,'NOT_FOUND','Программа не найдена.');
+    return {program};
+  });
   const token = (req: FastifyRequest) => {
     const candidate = req.headers.cookie?.split(';').map(v => v.trim()).find(v => v.startsWith('playfit_session='))?.slice(16);
     return candidate && /^[a-f0-9]{64}$/.test(candidate) ? candidate : null;
@@ -121,32 +128,40 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
     const user = requireUser(req);
     const rows = db.prepare('SELECT * FROM workout_results WHERE user_id=? AND archived_at IS NULL').all(user.id) as ResultRow[];
     const personal = rows.filter(r => JSON.parse(r.record_json).mode !== 'demo');
-    return { user, stats: { workouts: personal.length, reps: personal.reduce((n,r) => n + (JSON.parse(r.record_json) as WorkoutRecord).sets.reduce((m,s) => m+s.result.reps,0),0), seconds: Math.round(personal.reduce((n,r) => n + JSON.parse(r.record_json).duration,0)), demos: rows.length-personal.length } };
+    return { user, stats: { workouts: personal.length, reps: personal.reduce((n,r) => { const record = JSON.parse(r.record_json) as HistoryRecord; return n + (isProgram(record) ? record.steps : [record]).reduce((m,c) => m+c.sets.reduce((k,s) => k+s.result.reps,0),0); },0), seconds: Math.round(personal.reduce((n,r) => n + JSON.parse(r.record_json).duration,0)), demos: rows.length-personal.length } };
   });
-  app.post<{ Body: Snapshot & { requestId: string } }>('/api/runs', { schema: { body: obj({ ...snapshotSchema.properties, requestId: idSchema }), querystring: emptyQuery } }, async (req,reply) => {
+  app.post<{ Body: Snapshot & { requestId: string } }>('/api/runs', { schema: { body: {anyOf:[obj({ ...snapshotSchema.properties, requestId: idSchema }),obj({...programSnapshotSchema.properties,requestId:idSchema})]}, querystring: emptyQuery } }, async (req,reply) => {
     const user = requireUser(req);
-    const snapshot: Snapshot = { exercise:req.body.exercise, mode:req.body.mode, goal:req.body.goal, conditions:req.body.conditions.trim() };
+    const body = req.body;
+    const snapshot: Snapshot = 'kind' in body ? {kind:'program',program:body.program,mode:body.mode,conditions:body.conditions.trim()} : { exercise:body.exercise, mode:body.mode, goal:body.goal, conditions:body.conditions.trim() };
     const json = canonical(snapshot);
     const row = db.prepare('SELECT * FROM workout_runs WHERE user_id=? AND request_id=?').get(user.id,req.body.requestId) as { id: string; snapshot_json: string; created_at: string } | undefined;
     if (row && row.snapshot_json !== json) fail(409,'RUN_CONFLICT','Этот запрос уже связан с другой целью.');
+    if (!row && 'kind' in snapshot) {
+      const plan = snapshot.program, template = catalog(db).find(p => p.id === plan.id);
+      if (!validPlan(plan) || !template || !same({...plan,steps:plan.steps.map(s => ({id:s.id,exercise:s.exercise}))},{...template,steps:template.steps.map(s => ({id:s.id,exercise:s.exercise}))})) fail(409,'PROGRAM_CHANGED','Шаблон изменился или недоступен. Открой программу заново.');
+    }
     const id = row?.id ?? randomUUID(), createdAt = row?.created_at ?? new Date().toISOString();
     if (!row) db.prepare('INSERT INTO workout_runs VALUES (?,?,?,?,?)').run(id,user.id,req.body.requestId,json,createdAt);
     return reply.code(row ? 200 : 201).send({ id, snapshot, createdAt });
   });
   const findResult = (userId: string, id: string) => db.prepare('SELECT * FROM workout_results WHERE id=? AND user_id=?').get(id,userId) as ResultRow | undefined;
-  app.post<{ Params: { id: string }; Body: { record: WorkoutRecord } }>('/api/runs/:id/complete', { bodyLimit: 4 * 1024 * 1024, schema: { params: obj({ id:idSchema }), body: obj({ record:workoutSchema }), querystring: emptyQuery } }, async (req,reply) => {
+  app.post<{ Params: { id: string }; Body: { record: HistoryRecord } }>('/api/runs/:id/complete', { bodyLimit: 4 * 1024 * 1024, schema: { params: obj({ id:idSchema }), body: obj({ record:{anyOf:[workoutSchema,programRecordSchema]} }), querystring: emptyQuery } }, async (req,reply) => {
     const user = requireUser(req);
     const run = db.prepare('SELECT * FROM workout_runs WHERE id=? AND user_id=?').get(req.params.id,user.id) as { snapshot_json: string } | undefined;
     if (!run) fail(404,'NOT_FOUND','Запуск не найден.');
     const record = req.body.record;
-    validateRecord(record);
+    if (isProgram(record)) {
+      if (!validProgramRecord(record)) fail(400,'INVALID_RESULT','Нарушена последовательность шагов или показатели программы.');
+    } else validateRecord(record);
     const snapshot = JSON.parse(run.snapshot_json) as Snapshot;
-    if (record.id !== req.params.id || canonical({ exercise:record.exercise, mode:record.mode, goal:record.goal, conditions:record.conditions }) !== canonical(snapshot)) fail(409,'SNAPSHOT_MISMATCH','Результат не соответствует цели запуска.');
+    const resultSnapshot: Snapshot = isProgram(record) ? {kind:'program',program:record.program,mode:record.mode,conditions:record.conditions} : {exercise:record.exercise,mode:record.mode,goal:record.goal,conditions:record.conditions};
+    if (record.id !== req.params.id || canonical(resultSnapshot) !== canonical(snapshot) || (isProgram(record) && record.date !== (db.prepare('SELECT created_at FROM workout_runs WHERE id=?').get(req.params.id) as {created_at:string}).created_at)) fail(409,'SNAPSHOT_MISMATCH','Результат не соответствует цели запуска.');
     const json = canonical(record);
     const existing = db.prepare('SELECT * FROM workout_results WHERE run_id=? AND user_id=?').get(req.params.id,user.id) as ResultRow | undefined;
     if (existing && existing.record_json !== json) fail(409,'RESULT_CONFLICT','Запуск уже завершён с другим результатом.');
     const id = existing?.id ?? randomUUID();
-    if (!existing) db.prepare("INSERT INTO workout_results (id,user_id,run_id,source,source_version,record_json,created_at) VALUES (?,?,?,'training',1,?,?)").run(id,user.id,req.params.id,json,new Date().toISOString());
+    if (!existing) db.prepare("INSERT INTO workout_results (id,user_id,run_id,source,source_version,record_json,created_at) VALUES (?,?,?,'training',?,?,?)").run(id,user.id,req.params.id,isProgram(record) ? 2 : 1,json,new Date().toISOString());
     return reply.code(existing ? 200 : 201).send({ result: serializedResult(findResult(user.id,id)!) });
   });
   app.get('/api/history', { schema: { querystring:emptyQuery } }, async req => {
