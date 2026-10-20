@@ -8,6 +8,7 @@ import { availablePrograms, registerPrograms, programRecordSchema, programSnapsh
 import { isProgram, same, validPlan, validProgramRecord, type HistoryRecord, type ProgramSnapshot } from '../shared/program.js';
 import { accountCompletion, progression, receipt, RULES_VERSION } from './progression.js';
 import { activeChallenges, challengeReceipt, completeChallenge, registerChallenges } from './challenges.js';
+import { checkDuelCompletion, completeDuel, listDuels, registerDuels } from './duels.js';
 
 export class ApiError extends Error {
   constructor(readonly statusCode: number, readonly code: string, message: string) { super(message); }
@@ -68,6 +69,7 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
   };
   registerPrograms(app,db,requireUser,req => req.headers['x-playfit-user'] !== undefined ? requireUser(req) : current(req),fail);
   registerChallenges(app,db,requireUser,req => req.headers['x-playfit-user'] !== undefined ? requireUser(req) : current(req),fail);
+  registerDuels(app,db,requireUser,fail);
   const attempts = new Map<string, { count: number; until: number }>();
   let activeKdf = 0;
   async function authLimit(req: FastifyRequest, work: () => Promise<User>) {
@@ -166,9 +168,11 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
       const id = existing?.id ?? randomUUID();
       if (!existing) {
         const eventAt = new Date().toISOString();
+        checkDuelCompletion(db,user.id,req.params.id,record,eventAt,fail);
         db.prepare("INSERT INTO workout_results (id,user_id,run_id,source,source_version,record_json,created_at) VALUES (?,?,?,'training',?,?,?)").run(id,user.id,req.params.id,isProgram(record) ? 2 : 1,json,eventAt);
         accountCompletion(db,user.id,id,record,run.reward_rules_version,eventAt);
         completeChallenge(db,user.id,req.params.id,id,record,eventAt);
+        completeDuel(db,user.id,req.params.id,id,record,eventAt);
       }
       return { existing:!!existing, result:serializedResult(findResult(user.id,id)!) };
     }).immediate();
@@ -180,7 +184,8 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
   });
   app.get('/api/me/overview', { schema:{ querystring:emptyQuery } }, async req => {
     const user = requireUser(req);
-    return { progression:progression(db,user.id), challenges:activeChallenges(db,user.id,new Date().toISOString()), recent:(db.prepare('SELECT * FROM workout_results WHERE user_id=? AND archived_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 3').all(user.id) as ResultRow[]).map(serializedResult) };
+    const duels = listDuels(db,user.id,new Date().toISOString()).filter(d => ['invited','accepted','waiting'].includes(d.state));
+    return { progression:progression(db,user.id), duels, challenges:activeChallenges(db,user.id,new Date().toISOString()), recent:(db.prepare('SELECT * FROM workout_results WHERE user_id=? AND archived_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 3').all(user.id) as ResultRow[]).map(serializedResult) };
   });
   app.get('/api/history', { schema: { querystring:emptyQuery } }, async req => {
     const user = requireUser(req);

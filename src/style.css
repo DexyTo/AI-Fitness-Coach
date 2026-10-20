@@ -1,7 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 /* Challenges show saved participation and server-confirmed awards. */
 .competition-tabs { border-bottom:1px solid var(--border); margin-top:36px; }
-.competition-tabs a { display:inline-block; padding:16px 0; border-bottom:2px solid var(--accent); color:var(--accent); }
+.competition-tabs a { display:inline-block; padding:16px 0; margin-right:28px; border-bottom:2px solid transparent; color:var(--muted); }
+.competition-tabs a[aria-current='page'] { border-bottom-color:var(--accent); color:var(--accent); }
 .challenge-mark { display:grid; place-items:center; width:96px; height:96px; border:1px solid var(--border); border-radius:28px; background:var(--surface); color:var(--accent); }
 .challenge-mark .icon { width:44px; height:44px; }
 .challenge-card { gap:8px; }.challenge-card h2 { margin:4px 0; }.challenge-card .program-card-top { margin-bottom:16px; }
@@ -624,3 +625,22 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
   .program-management .account-actions, .program-tabs { gap: 8px; }
   .program-tabs .button { padding-inline: 12px; font-size: 12px; }
 }
+
+/* Duels reuse the program/challenge surfaces and theme tokens. */
+.duel-entry-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:28px 0 40px; }
+.duel-entry-grid .account-card { display:flex; flex-direction:column; gap:16px; align-items:flex-start; }
+.duel-entry-grid label, .duel-status label { width:100%; }
+.duel-entry-grid input, .duel-status input { width:100%; }
+.duel-rules { margin:24px 0; color:var(--muted); line-height:1.7; }
+.duel-rules summary { color:var(--text); cursor:pointer; font-weight:700; }
+.duel-rules p { margin:16px 0; }
+.duel-status { display:flex; flex-direction:column; align-items:stretch; gap:16px; }
+.duel-status h2, .duel-status p { margin:0; }
+.duel-code { font-family:monospace; letter-spacing:.06em; font-size:1.1rem; }
+.duel-players { display:grid; gap:16px; }
+.duel-player { display:grid; grid-template-columns:40px minmax(0,1fr); gap:8px 12px; padding:18px 0; border-bottom:1px solid var(--border); }
+.duel-player strong { align-self:center; overflow-wrap:anywhere; }
+.duel-player > span:last-child { grid-column:2; display:grid; gap:8px; }
+.duel-score { font-size:2rem; color:var(--accent); }
+.duel-draft-details { margin-top:32px; }
+@media(max-width:700px) { .duel-entry-grid { grid-template-columns:1fr; gap:16px; } .duel-status .button { width:100%; } }

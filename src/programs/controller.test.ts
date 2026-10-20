@@ -44,4 +44,20 @@ describe('program orchestration',()=>{
     const result=p.finish(1500,true);expect(result.ended).toBe('interrupted');expect(result.steps[0].sets[0].result.reps).toBe(0);expect(validProgramRecord(result)).toBe(true);
     result.program.title='changed';expect(p.finish(2000).program.title).toBe(s.program.title);
   });
+  it('resumes only recorded ordered steps with a fresh next analyzer and keeps interrupted/final records stable',()=>{
+    const s=snapshot(),p=new ProgramController(s,'run',date,0),first=child(s,0,0);
+    for(let t=0;t<10000&&first.phase!=='completed';t+=85)first.sample(demoPose('squat',t),t,1.6,t);
+    p.accept(first.finish(10000,10000),10000);
+    const checkpoint=p.checkpoint(10000);expect(validProgramRecord(checkpoint)).toBe(true);
+    const resumed=new ProgramController(s,'run',date,0);resumed.restore(checkpoint);
+    expect(resumed.index).toBe(1);expect(resumed.phase).toBe('exercise');
+    expect(child(s,resumed.index,11000).analyzer.snapshot().result.attempts).toEqual([]);
+    expect(()=>resumed.restore(checkpoint)).toThrow();
+    const second=child(s,1,11000);second.endSet(12000,12000);resumed.accept(second.finish(12000,12000),12000);
+    const interrupted=resumed.finish(12000);expect(validProgramRecord(interrupted)).toBe(true);
+    const closed=new ProgramController(s,'run',date,0);closed.restore(interrupted);
+    expect(closed.phase).toBe('finished');expect(closed.finish(99999)).toEqual(interrupted);
+    expect(()=>new ProgramController(s,'other',date,0).restore(checkpoint)).toThrow();
+    expect(()=>new ProgramController({...s,mode:'camera'},'run',date,0).restore(checkpoint)).toThrow();
+  });
 });

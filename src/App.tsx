@@ -15,6 +15,7 @@ import { ProgramCatalog, ProgramDetails } from './programs/ProgramViews';
 import { ProgramEditor } from './programs/ProgramEditor';
 import { OverviewView } from './account/ProgressionViews';
 import { ChallengesPage, ChallengeDetails } from './challenges/ChallengeViews';
+import { DuelDetails, DuelInvite, DuelsPage, NewDuel } from './duels/DuelViews';
 
 export default function App() {
   const { user } = useAccount();
@@ -54,6 +55,10 @@ export default function App() {
     <Route path='/profile' element={<ProfileView key={user?.id} />} />
     <Route path='/overview' element={<OverviewView key={user?.id} />} />
     <Route path='/competitions' element={<ChallengesPage key={user?.id}/>} />
+    <Route path='/competitions/duels' element={<DuelsPage key={user?.id}/>} />
+    <Route path='/competitions/duels/new' element={<NewDuel key={user?.id}/>} />
+    <Route path='/competitions/duels/invite/:code' element={<DuelInvite key={`${user?.id}-${location.pathname}`}/>} />
+    <Route path='/competitions/duels/:id' element={<DuelDetails key={`${user?.id}-${location.pathname}`}/>} />
     <Route path='/competitions/challenges/:id' element={<ChallengeDetails key={`${user?.id}-${location.pathname}`}/>} />
     <Route path='/programs' element={<ProgramCatalog />} />
     <Route path='/my-programs' element={<ProgramCatalog key='mine' scope='mine' />} />

@@ -7,7 +7,7 @@ export interface RewardReceipt {
 export interface Progression {
   xp: number; level: number; levelXp: number; nextLevelXp: number;
   todayXp: number; dailyLimit: number; workoutXp: number; timeZone: string;
-  competitionPoints: number; challengeXp: number;
+  competitionPoints: number; challengeXp: number; duelXp: number;
   stats: { workouts: number; reps: number; days: number; exercises: number };
   activity: { day: string; workouts: number }[];
   achievements: { id: string; title: string; description: string; target: number; progress: number; earnedAt: string | null; reward: string }[];

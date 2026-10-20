@@ -7,7 +7,7 @@ import { TrainingView } from '../components/TrainingView';
 import { WorkoutDetails, WorkoutMetrics } from '../components/HistoryView';
 import { Icon } from '../components/Icon';
 import { downloadJson } from '../training/history';
-import { validPlan, type ProgramPlan, type ProgramRecord, type ProgramSnapshot } from '../../shared/program';
+import { stepCompleted, validPlan, type ProgramPlan, type ProgramRecord, type ProgramSnapshot } from '../../shared/program';
 import { ProgramController } from './controller';
 import { loadPrograms, saveProgram, PROGRAM_HISTORY_KEY } from './history';
 import { FavoriteButton, FavoriteLoadError, ProgramActions, useFavorites } from './ProgramLibrary';
@@ -67,7 +67,8 @@ export function ProgramDetails() {
   </main>;
 }
 
-export function ProgramRun({controller,persistence,owner,onRestart,restartLabel='Повторить программу'}:{controller:ProgramController;persistence?:ProgramPersistence;owner:string;onRestart:()=>void;restartLabel?:string}) {
+export interface ProgramRunPersistence { save(record:ProgramRecord):Promise<RewardReceipt|void>; checkpoint?(record:ProgramRecord):Promise<void> }
+export function ProgramRun({controller,persistence,owner,onRestart,restartLabel='Повторить программу',draftOnly=false}:{controller:ProgramController;persistence?:ProgramRunPersistence;owner:string;onRestart:()=>void;restartLabel?:string;draftOnly?:boolean}) {
   const [reward,setReward] = useState<RewardReceipt|null>(null);
   const [,render] = useState(0); const [result,setResult] = useState<ProgramRecord|null>(null), [saved,setSaved] = useState(false), [error,setError] = useState(''), [saving,setSaving] = useState(false);
   const saveBusy = useRef(false); const index = controller.index;
@@ -80,6 +81,10 @@ export function ProgramRun({controller,persistence,owner,onRestart,restartLabel=
   const stepPersistence = useMemo<TrainingPersistence>(() => ({
     begin:async () => ({id:`${controller.id}:${index}`,createdAt:new Date().toISOString()}),
     save:async record => {
+      if(persistence?.checkpoint) {
+        const steps=[...controller.children,record];
+        await persistence.checkpoint({...controller.checkpoint(performance.now()),steps,ended:steps.length===controller.snapshot.program.steps.length&&steps.every(stepCompleted)?'completed':'interrupted'});
+      }
       controller.accept(record,performance.now());
       if(controller.phase==='finished') {const final=controller.finish(performance.now());setResult(final);void save(final);}
       render(v => v+1);
@@ -87,7 +92,7 @@ export function ProgramRun({controller,persistence,owner,onRestart,restartLabel=
   }),[controller,index]);
   useEffect(() => { const timer=window.setInterval(() => {if(controller.phase==='transition'){controller.remaining(performance.now());render(v => v+1);}},250);return () => clearInterval(timer); },[controller]);
   useEffect(() => { if(saved)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn); },[saved]);
-  if(result)return <main className='program-page page-enter'><span className='eyebrow'>ОБЩИЙ ИТОГ · {owner}</span><h1>{result.ended==='completed'?'Программа завершена':'Программа прервана'}<span className='accent'>.</span></h1>{saved&&!saving&&!error&&<RewardNotice reward={reward} guest={!persistence}/>}<ProgramResultDetails record={result}/><p role={error?'alert':'status'} className={error?'storage-error':'muted'}>{saving?'Сохраняем общий результат…':error?`${error} Сохранение не подтверждено. Повтори или экспортируй JSON перед уходом.`:saved?'Общий результат сохранён.':''}</p><div className='account-actions'>{error&&<button className='button' disabled={saving} onClick={()=>void save(result)}>Повторить сохранение</button>}<button className='button' onClick={()=>downloadJson({schemaVersion:2,programs:[result]},'playfit-program.json')}>Экспорт JSON</button><Link className='button' to='/history'>История</Link><button className='button button-primary' disabled={!saved} onClick={onRestart}>{restartLabel}</button></div></main>;
+  if(result)return <main className='program-page page-enter'><span className='eyebrow'>ОБЩИЙ ИТОГ · {owner}</span><h1>{result.ended==='completed'?'Программа завершена':'Программа прервана'}<span className='accent'>.</span></h1>{saved&&!saving&&!error&&!draftOnly&&<RewardNotice reward={reward} guest={!persistence}/>}<ProgramResultDetails record={result}/><p role={error?'alert':'status'} className={error?'storage-error':'muted'}>{saving?'Сохраняем общий результат…':error?`${error} Сохранение не подтверждено. Повтори или экспортируй JSON перед уходом.`:saved?draftOnly?'Черновик сохранён на сервере. Вернись к дуэли и отправь итог окончательно. До отправки зачёта и наград нет.':'Общий результат сохранён.':''}</p><div className='account-actions'>{error&&<button className='button' disabled={saving} onClick={()=>void save(result)}>Повторить сохранение</button>}<button className='button' onClick={()=>downloadJson({schemaVersion:2,programs:[result]},'playfit-program.json')}>Экспорт JSON</button>{!draftOnly&&<Link className='button' to='/history'>История</Link>}<button className='button button-primary' disabled={!saved} onClick={onRestart}>{restartLabel}</button></div></main>;
   const step=controller.snapshot.program.steps[index];
   return <><section className='program-run-banner'><div><span className='eyebrow'>ПРОГРАММА · {controller.snapshot.mode==='demo'?'СИНТЕТИЧЕСКОЕ ДЕМО': 'КАМЕРА'}</span><h2>{controller.snapshot.program.title}</h2><p>Шаг {index+1}/{controller.snapshot.program.steps.length} · {owner}</p></div><progress aria-label='Завершённые шаги' value={index} max={controller.snapshot.program.steps.length}/></section>
     {controller.phase==='exercise'?<TrainingView key={`${controller.id}:${index}`} exercise={step.exercise} mode={controller.snapshot.mode} onHome={finish} programStep={{goal:step.goal,conditions:controller.snapshot.conditions,persistence:stepPersistence}}/>:<main className='program-page program-transition page-enter'><span className='eyebrow'>СМЕНА УПРАЖНЕНИЯ</span><h1>{controller.phase==='paused'?'Пауза перехода':controller.phase==='next'?'Можно продолжать':'Отдохни перед следующим шагом'}<span className='accent'>.</span></h1><p className='transition-clock' role='status'>{controller.phase==='next'?'Готово':`${controller.remaining(performance.now())} с`}</p><h2>Далее: {labels[step.exercise]}</h2><p>{step.goal.sets} × {step.goal.reps} · отдых между подходами {step.goal.restSeconds} с</p><p className='muted'>Камера освобождена. Движения не учитываются. Следующий шаг начнётся с новой подготовки.</p><div className='account-actions'>{controller.phase==='transition'&&<button className='button' onClick={()=>{controller.pause(performance.now());render(v=>v+1);}}>Пауза перехода</button>}{controller.phase==='paused'&&<button className='button' onClick={()=>{controller.resume(performance.now());render(v=>v+1);}}>Продолжить отдых</button>}{controller.phase==='next'&&<button className='button button-primary' onClick={()=>{controller.next(performance.now());render(v=>v+1);}}>К следующему упражнению <Icon name='arrow'/></button>}<button className='button' onClick={finish}>Прервать программу</button></div></main>}</>;

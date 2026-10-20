@@ -1,4 +1,4 @@
-import { same, stepCompleted, type ProgramRecord, type ProgramSnapshot } from '../../shared/program';
+import { same, stepCompleted, validProgramRecord, type ProgramRecord, type ProgramSnapshot } from '../../shared/program';
 import type { WorkoutRecord } from '../../shared/workout';
 
 // Composes complete single-exercise sessions. A fresh TrainingController is mounted
@@ -12,6 +12,16 @@ export class ProgramController {
   private final: ProgramRecord | null = null;
   constructor(snapshot:ProgramSnapshot, readonly id:string, readonly date:string, private startAt:number) { this.snapshot = structuredClone(snapshot); }
   get index() { return this.children.length; }
+  checkpoint(now:number):ProgramRecord {
+    return {schemaVersion:2,id:this.id,date:this.date,...structuredClone(this.snapshot),ended:'interrupted',duration:Math.max(0,(now-this.startAt)/1000),steps:structuredClone(this.children)};
+  }
+  restore(record:ProgramRecord) {
+    if(this.children.length || this.final || !validProgramRecord(record) || record.id!==this.id || record.date!==this.date || record.mode!==this.snapshot.mode || record.conditions!==this.snapshot.conditions || !same(record.program,this.snapshot.program)) throw Error('Черновик не соответствует запуску.');
+    this.children.push(...structuredClone(record.steps));
+    if(this.index===this.snapshot.program.steps.length || (this.index>0&&!stepCompleted(this.children[this.index-1]))) {
+      this.phase='finished';this.final=structuredClone(record);
+    }
+  }
   accept(record:WorkoutRecord, now:number) {
     if (this.children.some(c => c.id === record.id)) return;
     if (this.phase !== 'exercise') throw Error('Сейчас нельзя завершить шаг.');
