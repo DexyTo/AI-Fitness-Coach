@@ -1,5 +1,6 @@
 import type { PoseLandmarks } from '../exercises/types';
 import { edges, visible } from './landmarks';
+import { containViewport } from './viewport';
 
 
 export function drawPose(
@@ -7,6 +8,8 @@ export function drawPose(
   points: PoseLandmarks,
   width: number,
   height: number,
+  sourceWidth = width,
+  sourceHeight = height,
 ) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   if (
@@ -20,6 +23,9 @@ export function drawPose(
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
+  const viewport = containViewport(width, height, sourceWidth, sourceHeight);
+  const x = (value: number) => viewport.x + value * viewport.width;
+  const y = (value: number) => viewport.y + value * viewport.height;
   ctx.lineWidth = 4;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -29,15 +35,15 @@ export function drawPose(
   for (const [i, j] of edges) {
     if (!visible(points[i]) || !visible(points[j])) continue;
     ctx.beginPath();
-    ctx.moveTo(points[i].x * width, points[i].y * height);
-    ctx.lineTo(points[j].x * width, points[j].y * height);
+    ctx.moveTo(x(points[i].x), y(points[i].y));
+    ctx.lineTo(x(points[j].x), y(points[j].y));
     ctx.stroke();
   }
   ctx.shadowBlur = 0;
   for (const i of new Set(edges.flat())) {
     if (!visible(points[i])) continue;
     ctx.beginPath();
-    ctx.arc(points[i].x * width, points[i].y * height, 5, 0, Math.PI * 2);
+    ctx.arc(x(points[i].x), y(points[i].y), 5, 0, Math.PI * 2);
     ctx.fillStyle = '#f4ffd9';
     ctx.fill();
     ctx.lineWidth = 2;

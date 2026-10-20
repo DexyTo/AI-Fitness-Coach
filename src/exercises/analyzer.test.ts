@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { createAnalyzer } from './analyzer';
 import { demoPose } from '../pose/demo';
 import { calculateAngle } from '../pose/geometry';
+import { sideView } from '../pose/landmarks';
+import { VideoTimeline } from '../pose/videoTimeline';
 import type { ExerciseType, PoseLandmarks } from './types';
 
 
@@ -75,7 +77,8 @@ function sequence(exercise: ExerciseType = 'squat') {
     return analyzer.snapshot();
   };
   const path = (angles: number[], change?: (p: PoseLandmarks) => void) => {
-    angles.forEach(a => feed(a, 4, change));
+    // The new preparation requires a stable top, rather than a single top frame.
+    angles.forEach(a => feed(a, a >= 175 ? 8 : 4, change));
     return analyzer.snapshot();
   };
   const lose = (frames: number) => {
@@ -85,6 +88,212 @@ function sequence(exercise: ExerciseType = 'squat') {
   return { analyzer, feed, path, lose, finish: () => analyzer.finish(time + 1) };
 }
 const fullCycle = [180, 160, 140, 120, 100, 80, 80, 100, 120, 140, 160, 180];
+
+function timedAngle(t: number, period: number) {
+  if (t < 1000) return 176;
+  const phase = ((t - 1000) % period) / period;
+  if (phase < 0.38) return 176 - 96 * phase / 0.38;
+  if (phase < 0.52) return 80;
+  if (phase < 0.9) return 80 + 96 * (phase - 0.52) / 0.38;
+  return 176;
+}
+
+describe('time-based squat preparation and tracking (synthetic only)', () => {
+  for (const interval of [33, 50, 90, 125, 200]) {
+    for (const period of [1800, 3600, 8000]) {
+      it(`counts three cycles at ${interval} ms observations and ${period} ms tempo with noise`, () => {
+        const analyzer = createAnalyzer('squat');
+        const end = 1000 + 3 * period;
+        for (let t = 0; t <= end + 600; t += interval) {
+          const angle = (t > end ? 176 : timedAngle(t, period)) + 1.2 * Math.sin(t / 33);
+          analyzer.analyze(poseAtAngle('squat', angle), t + 1, 1.6);
+        }
+        const result = analyzer.finish(end + 601).result;
+        expect(result.reps).toBe(3);
+        expect(result.incomplete + result.unassessed).toBe(0);
+        expect(result.withErrors).toBe(0);
+      });
+    }
+  }
+  it('also tolerates uneven processing intervals within 33–200 ms', () => {
+    const analyzer = createAnalyzer('squat');
+    const steps = [33, 200, 50, 125, 90];
+    let t = 0, i = 0;
+    while (t < 12400) {
+      analyzer.analyze(poseAtAngle('squat', t > 11800 ? 176 : timedAngle(t, 3600)), t + 1, 1.6);
+      t += steps[i++ % steps.length];
+    }
+    expect(analyzer.finish(t).result.reps).toBe(3);
+  });
+  it('requires stable initial extension; a fleeting top and an initial ascent count nothing', () => {
+    const s = sequence();
+    s.feed(180, 1);
+    s.path([140, 100, 80, 100, 140]);
+    s.feed(180, 1);
+    expect(s.analyzer.snapshot().preparation.stage).toBe('preparing');
+    expect(s.finish().result.attempts).toEqual([]);
+  });
+  it('does not calibrate a held low pose as a valid starting position', () => {
+    const s = sequence();
+    s.feed(130, 50);
+    expect(s.analyzer.snapshot().preparation.stage).toBe('preparing');
+    s.path([110, 80, 110, 130]);
+    expect(s.finish().result.attempts).toEqual([]);
+  });
+  it('reselects a complete side during setup after the initially chosen shoulder is lost', () => {
+    const s = sequence();
+    s.feed(180, 1);
+    s.feed(180, 16, p => { p[11].visibility = 0; });
+    expect(s.analyzer.snapshot().observation.side).toBe('right');
+    expect(s.analyzer.snapshot().observation.status).toBe('ready');
+    expect(s.finish().result.attempts).toEqual([]);
+  });
+  it('separates visible joints from an unsuitable or uncertain view', () => {
+    const analyzer = createAnalyzer('squat');
+    const front = poseAtAngle('squat', 180);
+    for (const index of [12, 24, 26, 28]) front[index].x += 0.2;
+    for (let t = 1; t < 1500; t += 90) analyzer.analyze(front, t, 1.6);
+    expect(analyzer.snapshot().observation.status).toBe('ready');
+    expect(analyzer.snapshot().preparation.view).toBe('unsuitable');
+    expect(analyzer.snapshot().preparation.stage).toBe('preparing');
+    expect(analyzer.snapshot().angle).toBeNull();
+    analyzer.confirmSideView();
+    analyzer.analyze(front, 1600, 1.6);
+    expect(analyzer.snapshot().preparation.stage).toBe('preparing');
+    const uncertain = poseAtAngle('squat', 180);
+    uncertain[12].x += 0.08;
+    expect(sideView(uncertain, 1.6)).toBe('unknown');
+  });
+  it('allows an occluded far side after explicit profile confirmation without borrowing points', () => {
+    const s = sequence();
+    const hideFar = (p: PoseLandmarks) => { for (const i of [12, 24, 26, 28]) p[i].visibility = 0; };
+    const uncertain = s.feed(180, 8, hideFar);
+    expect(uncertain.observation.status).toBe('ready');
+    expect(uncertain.preparation.view).toBe('unknown');
+    expect(uncertain.preparation.stage).toBe('preparing');
+    s.analyzer.confirmSideView();
+    const completed = s.path(fullCycle, hideFar);
+    expect(completed.result.reps).toBe(1);
+    expect(completed.observation.side).toBe('left');
+  });
+  it('does not switch sides on confidence jitter, and reacquires a whole chain after a long loss', () => {
+    const s = sequence();
+    s.path([180, 160, 140, 100, 80]);
+    const jittered = s.feed(80, 4, p => { for (const i of [11, 23, 25, 27]) p[i].visibility = 0.6; });
+    expect(jittered.observation.side).toBe('left');
+    const hideLeft = (p: PoseLandmarks) => { for (const i of [11, 23, 25, 27]) p[i].visibility = 0; };
+    const firstMissing = s.feed(80, 1, hideLeft);
+    expect(firstMissing.observation.side).toBe('left');
+    expect(firstMissing.preparation.stage).toBe('recovering');
+    s.feed(80, 12, hideLeft);
+    s.analyzer.confirmSideView();
+    const recovered = s.path([80, 100, 140], hideLeft);
+    expect(recovered.observation.side).toBe('right');
+    expect(recovered.result.reps).toBe(0);
+    expect(recovered.result.unassessed).toBe(1);
+    s.analyzer.confirmSideView();
+    expect(s.path(fullCycle, hideLeft).result.reps).toBe(1);
+  });
+  it('does not count a stop or a small reversal at the bottom twice', () => {
+    const s = sequence();
+    s.path([180, 140, 100, 80]);
+    s.feed(80, 40);
+    s.path([84, 79, 86, 82, 100, 140, 180]);
+    expect(s.finish().result.reps).toBe(1);
+  });
+  it('does not prove lean from an uncertain view even if motion joints remain visible', () => {
+    const s = sequence();
+    s.path([180, 160, 140]);
+    s.feed(100, 4, p => { p[11].x += 0.2; });
+    expect(s.analyzer.snapshot().preparation.view).toBe('unknown');
+    expect(s.analyzer.snapshot().observation.status).toBe('ready');
+    expect(s.analyzer.snapshot().feedback).toEqual([]);
+    s.path([80, 100, 140, 180]);
+    const result = s.finish().result;
+    expect(result.unassessed).toBe(1);
+    expect(result.attempts[0].criteria.lean?.status).toBe('unassessed');
+    expect(result.attempts[0].remarks).not.toContain('lean');
+  });
+  it('keeps the camera correction visible when a long view loss interrupts a movement', () => {
+    const s = sequence();
+    s.path([180, 160, 140]);
+    const lost = s.feed(100, 9, p => { p[11].x += 0.2; });
+    expect(lost.preparation.stage).toBe('recovering');
+    expect(lost.preparation.message).toContain('Ракурс не удалось определить');
+    expect(lost.state).toBe('Оценка приостановлена');
+    expect(lost.angle).toBeNull();
+    expect(lost.result.unassessed).toBe(1);
+  });
+  for (const interval of [33, 90, 200]) {
+    for (const duration of [0, 600]) {
+      it(`confirms lean over time, spike duration ${duration} ms at ${interval} ms intervals`, () => {
+        const analyzer = createAnalyzer('squat');
+        for (let t = 0; t <= 5200; t += interval) {
+          const p = poseAtAngle('squat', t > 4600 ? 176 : timedAngle(t, 3600));
+          // At least one sample, with all other geometry and the camera view unchanged.
+          if (t >= 1800 && t < 1800 + Math.max(duration, interval)) {
+            p[11].x += 0.2; p[12].x += 0.2;
+          }
+          analyzer.analyze(p, t + 1, 1.6);
+        }
+        const result = analyzer.finish(5201).result;
+        expect(result.reps).toBe(1);
+        expect(result.attempts[0].remarks.includes('lean')).toBe(duration > 0);
+      });
+    }
+  }
+  it('never confirms a finding by adding isolated spikes across gaps', () => {
+    const s = sequence();
+    s.path([180, 160, 140]);
+    for (let i = 0; i < 8; i++) {
+      s.feed(100, 1, p => { p[11].x += 0.2; p[12].x += 0.2; });
+      s.lose(1);
+    }
+    s.path([80, 100, 140, 180]);
+    const result = s.finish().result;
+    expect(result.unassessed).toBe(1);
+    expect(result.attempts[0].remarks).not.toContain('lean');
+  });
+  it('does not let a single false lower-angle sample complete a shallow attempt', () => {
+    const s = sequence();
+    s.path([180, 160, 140, 125]);
+    s.feed(70, 1);
+    s.path([125, 140, 160, 180]);
+    expect(s.finish().result.incomplete).toBe(1);
+  });
+  it('splits seeks, repeated end notifications and a restarted recording explicitly', () => {
+    const s = sequence();
+    s.path([180, 140, 100, 80]);
+    s.analyzer.interrupt(1, 'timeline_reset');
+    s.path([80, 100, 140, 180]);
+    const ended = s.finish();
+    expect(ended.result.attempts).toHaveLength(1);
+    expect(ended.result.attempts[0].endedAt).toBeGreaterThanOrEqual(ended.result.attempts[0].startedAt);
+    expect(s.finish().result).toEqual(ended.result);
+    s.analyzer.reset();
+    expect(s.path(fullCycle).result.reps).toBe(1);
+    expect(s.finish().result.attempts).toHaveLength(1);
+  });
+  it('uses recording time at different playback rates and makes seeks separate segments', () => {
+    for (const rate of [0.5, 1, 2]) {
+      const timeline = new VideoTimeline();
+      const analyzer = createAnalyzer('squat');
+      for (let wall = 0; wall <= 5200 / rate; wall += 90) {
+        const source = wall * rate;
+        const sample = timeline.sample(source / 1000);
+        analyzer.analyze(poseAtAngle('squat', source > 4600 ? 176 : timedAngle(source, 3600)), sample.time, 1.6);
+      }
+      expect(analyzer.finish(timeline.time).result.reps).toBe(1);
+      const last = timeline.time;
+      timeline.seek();
+      expect(timeline.sample(0)).toEqual({ time: last + 1, reset: true, changed: true });
+      expect(timeline.sample(0).changed).toBe(false);
+      timeline.seek();
+      expect(timeline.sample(30).reset).toBe(true);
+      expect(timeline.time).toBe(last + 2);
+    }
+  });
+});
 
 describe('observation quality and attempts', () => {
   it('records shallow attempts after a complete squat instead of dropping them', () => {
@@ -102,7 +311,8 @@ describe('observation quality and attempts', () => {
   });
   it('does not turn a pushup with missing ankles into a positive result', () => {
     const s = sequence('pushup');
-    const state = s.path(fullCycle, p => { p[27].visibility = 0; p[28].visibility = 0; });
+    s.feed(180, 8);
+    const state = s.path(fullCycle.slice(1), p => { p[27].visibility = 0; p[28].visibility = 0; });
     expect(state.observation.status).toBe('partial');
     expect(state.angle).toBeNull();
     expect(state.feedback).toEqual([]);
@@ -163,7 +373,7 @@ describe('observation quality and attempts', () => {
   });
   it('removes stale angle and hints immediately on pose loss and does not glue a long gap', () => {
     const s = sequence();
-    s.path([180, 160, 140, 100, 80], p => { p[11].x += 0.2; });
+    s.path([180, 160, 140, 100, 80], p => { p[11].x += 0.2; p[12].x += 0.2; });
     expect(s.analyzer.snapshot().feedback.some(f => f.code === 'lean')).toBe(true);
     const lost = s.lose(1);
     expect(lost.observation.status).toBe('unavailable');
@@ -280,7 +490,8 @@ describe('observation quality and attempts', () => {
   }
   it('does not equate unknown landmark confidence with good quality', () => {
     const s = sequence('pushup');
-    const state = s.path(fullCycle, p => { p[27].visibility = undefined; p[28].visibility = undefined; });
+    s.feed(180, 8);
+    const state = s.path(fullCycle.slice(1), p => { p[27].visibility = undefined; p[28].visibility = undefined; });
     expect(state.result.reps).toBe(0);
     expect(state.result.unassessed).toBe(1);
   });

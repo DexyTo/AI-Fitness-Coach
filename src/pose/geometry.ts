@@ -23,14 +23,6 @@ export function distance(a: PosePoint, b: PosePoint, aspect = 1): number {
   return Math.hypot((a.x - b.x) * aspect, a.y - b.y);
 }
 
-export function smooth(
-  previous: number | null,
-  value: number,
-  weight = 0.42,
-): number {
-  return previous === null ? value : previous * (1 - weight) + value * weight;
-}
-
 export function trunkLean(
   shoulder: PosePoint,
   hip: PosePoint,

@@ -9,6 +9,7 @@ import type {
   UnavailableSourceReason,
 } from '../exercises/types';
 import { calculateAngle, distance, trunkLean } from './geometry';
+import { exerciseVariants, tracking } from '../exercises/config';
 
 
 export const L = {
@@ -47,17 +48,29 @@ export function visible(p?: PosePoint): p is PosePoint {
     Number.isFinite(p.x) &&
     Number.isFinite(p.y) &&
     Number.isFinite(p.visibility) &&
-    (p.visibility ?? 0) >= 0.55 &&
+    (p.visibility ?? 0) >= tracking.visibility &&
     (p.presence === undefined || Number.isFinite(p.presence)) &&
-    (p.presence ?? 1) >= 0.5 &&
-    p.x >= 0.02 &&
-    p.x <= 0.98 &&
-    p.y >= 0.02 &&
-    p.y <= 0.98
+    (p.presence ?? 1) >= tracking.presence &&
+    p.x >= tracking.frameMargin &&
+    p.x <= 1 - tracking.frameMargin &&
+    p.y >= tracking.frameMargin &&
+    p.y <= 1 - tracking.frameMargin
   );
 }
 
 export type BodySide = 'left' | 'right';
+
+// A 2D projection heuristic, NOT a measurement of body orientation. Occluded far-side
+// joints are normal in profile: return unknown, never demand that they become visible.
+export function sideView(points: PoseLandmarks, aspect: number): 'side' | 'unsuitable' | 'unknown' {
+  if (![11, 12, 23, 24].every(i => visible(points[i])) || !Number.isFinite(aspect) || aspect <= 0) return 'unknown';
+  const torso = (distance(points[11], points[23], aspect) + distance(points[12], points[24], aspect)) / 2;
+  if (torso < tracking.minTorsoHeight) return 'unknown';
+  const widths = [distance(points[11], points[12], aspect), distance(points[23], points[24], aspect)].map(w => w / torso);
+  if (widths.every(w => w <= tracking.sideWidthRatio)) return 'side';
+  if (widths.every(w => w >= tracking.frontWidthRatio)) return 'unsuitable';
+  return 'unknown';
+}
 
 export function criterionPoints(exercise: ExerciseType, side: BodySide): Partial<Record<FeedbackCode, number[]>> {
   const offset = side === 'left' ? 0 : 1;
@@ -95,7 +108,7 @@ export function observePose(points: PoseLandmarks, exercise: ExerciseType, aspec
       if (motion && !reason) rawAngle = value;
       criteria[code] = {
         status: reason || motion ? 'unassessed'
-          : (code === 'lean' ? value > 43 : Math.abs(180 - value) > 27) ? 'deviation' : 'passed',
+          : (code === 'lean' ? value > exerciseVariants.squat.trunkLean : Math.abs(180 - value) > exerciseVariants.pushup.bodyLineDeviation) ? 'deviation' : 'passed',
         observedFrames: reason ? 0 : 1,
         reasons: reason ? [reason] : motion ? [{ code: 'movement_pending', criterion: code }] : [],
       };

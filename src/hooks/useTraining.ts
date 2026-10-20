@@ -8,10 +8,11 @@ import type {
   UnavailableSourceReason,
 } from '../exercises/types';
 import { createAnalyzer } from '../exercises/analyzer';
+import { tracking } from '../exercises/config';
 import { demoPose } from '../pose/demo';
 import { clearPose, drawPose } from '../pose/drawing';
 import { closeDetector, getDetector } from '../pose/poseDetector';
-import { reasonText } from '../exercises/types';
+import { VideoTimeline } from '../pose/videoTimeline';
 
 
 interface Options {
@@ -29,6 +30,7 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
   );
   const [status, setStatus] = useState('Ожидание запуска');
   const [started, setStarted] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [session, setSession] = useState<TrainingSession | null>(null);
   const startAt = useRef(0),
@@ -36,11 +38,16 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
     rafRef = useRef(0),
     streamRef = useRef<MediaStream | null>(null);
   const cancelRef = useRef(false),
+    runRef = useRef(0),
+    timelineRef = useRef(new VideoTimeline()),
+    analysisTime = useRef(0),
+    stalledInterrupted = useRef(false),
     lastFrame = useRef(0),
     lastVideoTime = useRef(-1),
     lastVideoFrameAt = useRef(0),
     lastUi = useRef(0);
   const stop = useCallback(() => {
+    runRef.current++;
     cancelRef.current = true;
     cancelAnimationFrame(rafRef.current);
     window.clearInterval(clockRef.current);
@@ -54,6 +61,7 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
     }
     if (canvasRef.current) clearPose(canvasRef.current);
     setStarted(false);
+    setStarting(false);
   }, []);
   useEffect(
     () => () => {
@@ -65,9 +73,9 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
   const finish = () => {
     const duration = Math.max(
       1,
-      Math.round((performance.now() - startAt.current) / 1000),
+      Math.round((mode === 'video' ? timelineRef.current.time : performance.now() - startAt.current) / 1000),
     );
-    const finalAnalysis = analyzerRef.current.finish(performance.now());
+    const finalAnalysis = analyzerRef.current.finish(mode === 'video' ? analysisTime.current : performance.now());
     setAnalysis(finalAnalysis);
     const result = finalAnalysis.result;
     const mainError = (Object.entries(result.errors).sort(
@@ -84,7 +92,10 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
   };
   const start = async () => {
     stop();
+    const run = runRef.current;
+    const cancelled = () => cancelRef.current || runRef.current !== run;
     cancelRef.current = false;
+    setStarting(true);
     setStatus(mode === 'demo' ? 'Запуск демо' : 'Подготовка модели...');
     analyzerRef.current = createAnalyzer(exercise);
     setAnalysis(analyzerRef.current.snapshot());
@@ -105,7 +116,7 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
           },
           audio: false,
         });
-        if (cancelRef.current) {
+        if (cancelled()) {
           stream.getTracks().forEach((track) => track.stop());
           return;
         }
@@ -120,15 +131,19 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
         video.loop = false;
       }
       const detector = mode === 'demo' ? null : await getDetector();
-      if (cancelRef.current) return;
+      if (cancelled()) return;
       // A short local recording must not play through while the model is loading.
       if (mode === 'video' && video) await video.play();
-      if (cancelRef.current) return;
+      if (cancelled()) return;
       startAt.current = performance.now();
       lastFrame.current = 0;
       lastVideoTime.current = -1;
       lastVideoFrameAt.current = startAt.current;
       lastUi.current = 0;
+      analysisTime.current = mode === 'video' ? 0 : startAt.current;
+      timelineRef.current = new VideoTimeline();
+      stalledInterrupted.current = false;
+      setStarting(false);
       setStarted(true);
       setStatus(
         mode === 'demo'
@@ -137,11 +152,11 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
       );
       clockRef.current = window.setInterval(
         () =>
-          setSeconds(Math.floor((performance.now() - startAt.current) / 1000)),
+          setSeconds(Math.floor((mode === 'video' ? timelineRef.current.time : performance.now() - startAt.current) / 1000)),
         1000,
       );
       const tick = () => {
-        if (cancelRef.current) return;
+        if (cancelled()) return;
         rafRef.current = requestAnimationFrame(tick);
         const now = performance.now();
         const sourceEnded = mode === 'video' && video?.ended;
@@ -151,20 +166,26 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
         if (!canvas) return;
         let points: PoseLandmarks = [];
         let sourceReason: UnavailableSourceReason | undefined;
-        let width = canvas.clientWidth,
+        let timestamp = mode === 'video' ? analysisTime.current : now;
+        const width = canvas.clientWidth,
           height = canvas.clientHeight;
+        // Demo has a fixed source aspect, independent of responsive viewport dimensions.
         if (mode === 'demo') points = demoPose(exercise, now - startAt.current);
         else if (
           video &&
           video.readyState >= 2 &&
+          !video.seeking &&
           video.videoWidth &&
           video.currentTime !== lastVideoTime.current
         ) {
-          if (lastVideoTime.current >= 0 && (video.currentTime < lastVideoTime.current || video.currentTime - lastVideoTime.current > 0.7)) {
-            analyzerRef.current.interrupt(now, 'timeline_reset');
+          if (mode === 'video') {
+            const sample = timelineRef.current.sample(video.currentTime);
+            timestamp = sample.time;
+            if (sample.reset) analyzerRef.current.interrupt(timestamp - 0.5, 'timeline_reset');
           }
           lastVideoTime.current = video.currentTime;
           lastVideoFrameAt.current = now;
+          stalledInterrupted.current = false;
           try {
             points = detector?.detectForVideo(video, now).landmarks[0] ?? [];
           } catch {
@@ -179,31 +200,34 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
           }
           if (now - lastVideoFrameAt.current < 250) return;
           sourceReason = 'source_unavailable';
+          if (mode === 'video' && now - lastVideoFrameAt.current > tracking.maxGapMs && !stalledInterrupted.current) {
+            analyzerRef.current.interrupt(timestamp, 'tracking_gap');
+            stalledInterrupted.current = true;
+          }
         }
         if (width < 1 || height < 1) return;
         const aspect =
           mode === 'demo'
-            ? width / height
+            ? 1.6
             : (video?.videoWidth ?? width) / (video?.videoHeight ?? height);
-        if (points.length) drawPose(canvas, points, width, height);
+        if (points.length) drawPose(canvas, points, width, height, mode === 'demo' ? 1600 : video!.videoWidth, mode === 'demo' ? 1000 : video!.videoHeight);
         else clearPose(canvas);
         const before = analyzerRef.current.snapshot();
-        const current = analyzerRef.current.analyze(points, now, aspect, sourceReason);
+        analysisTime.current = timestamp;
+        const current = analyzerRef.current.analyze(points, timestamp, aspect, sourceReason);
         if (now - lastUi.current > 130 || current.observation.status !== 'ready' ||
             current.observation.status !== before.observation.status ||
+            current.preparation.stage !== before.preparation.stage ||
             current.result.attempts.length !== before.result.attempts.length) {
           setAnalysis(current);
           lastUi.current = now;
         }
-        setStatus(current.observation.status !== 'ready'
-          ? `Оценка приостановлена. ${reasonText(current.observation.reasons[0])}`
-          : mode === 'demo' ? 'Демо: смоделированные точки тела'
-          : 'Поза определена · анализ идёт на устройстве');
+        setStatus(`${mode === 'demo' ? 'Симуляция. ' : ''}${current.preparation.message}`);
         if (sourceEnded) finish();
       };
       rafRef.current = requestAnimationFrame(tick);
     } catch (error) {
-      if (cancelRef.current) return;
+      if (cancelled()) return;
       stop();
       const message = error instanceof Error ? error.message : String(error);
       if (mode === 'camera' && /denied|permission|notallowed/i.test(message))
@@ -219,10 +243,29 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
     analysis,
     status,
     started,
+    starting,
     seconds,
     session,
     start,
     finish,
     stop,
+    restart: () => {
+      stop();
+      analyzerRef.current = createAnalyzer(exercise);
+      setAnalysis(analyzerRef.current.snapshot());
+      setSession(null);
+      setSeconds(0);
+      setStatus('Новый анализ начнётся с начала записи; счётчики сброшены.');
+    },
+    confirmSideView: () => analyzerRef.current.confirmSideView(),
+    seek: () => {
+      if (mode !== 'video' || !started) return;
+      timelineRef.current.seek();
+      lastVideoTime.current = -1;
+      const interrupted = analyzerRef.current.interrupt(analysisTime.current, 'timeline_reset');
+      setAnalysis(interrupted);
+      setStatus('Перемотка: текущая попытка прервана. Снова удерживайте исходную позицию.');
+      if (canvasRef.current) clearPose(canvasRef.current);
+    },
   };
 }

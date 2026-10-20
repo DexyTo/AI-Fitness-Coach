@@ -558,11 +558,23 @@ footer {
   height: 100%;
 }
 .feed {
-  object-fit: fill;
+  object-fit: contain;
+  object-position: center;
 }
 .pose-overlay {
   z-index: 2;
+  pointer-events: none;
 }
+.camera-guide {
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid #738f5e;
+  border-radius: 12px;
+  color: #d1e6b6;
+}
+.camera-guide svg { display: block; width: 100%; max-height: 125px; margin-top: 12px; }
+.camera-guide p { font-size: 12px; line-height: 1.6; margin: 10px 0 0; }
+.camera-guide .button { white-space: normal; margin-top: 10px; font-size: 12px; }
 .demo-backdrop {
   background-color: #16271d;
   background-image:

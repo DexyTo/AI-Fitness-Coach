@@ -1,6 +1,6 @@
 export type ExerciseType = 'squat' | 'pushup';
 export type InputMode = 'camera' | 'demo' | 'video';
-export type ExerciseState = 'Готов' | 'Опускаетесь' | 'Нижняя точка' | 'Поднимаетесь' | 'Оценка приостановлена';
+export type ExerciseState = 'Подготовка' | 'Готов' | 'Опускаетесь' | 'Нижняя точка' | 'Поднимаетесь' | 'Оценка приостановлена';
 export type FeedbackCode = 'depth' | 'lean' | 'extension' | 'line';
 export interface ExerciseFeedback { code: FeedbackCode; message: string }
 export interface PosePoint {
@@ -12,7 +12,7 @@ export interface PosePoint {
 }
 export type PoseLandmarks = PosePoint[];
 export type UnavailableSourceReason = 'source_unavailable' | 'detector_error';
-export type ObservationReasonCode = 'no_pose' | 'missing_points' | 'invalid_geometry' | 'tracking_gap' | 'timeline_reset' | 'movement_pending' | UnavailableSourceReason;
+export type ObservationReasonCode = 'no_pose' | 'missing_points' | 'invalid_geometry' | 'tracking_gap' | 'timeline_reset' | 'movement_pending' | 'unsuitable_view' | 'view_unknown' | UnavailableSourceReason;
 export interface ObservationReason {
   code: ObservationReasonCode;
   criterion?: FeedbackCode;
@@ -55,6 +55,12 @@ export interface ExerciseResult {
   attempts: MovementAttempt[];
 }
 export interface ExerciseAnalysisResult {
+  preparation: {
+    stage: 'preparing' | 'ready' | 'active' | 'recovering';
+    view: 'side' | 'unsuitable' | 'unknown' | 'not_required';
+    viewConfirmed: boolean;
+    message: string;
+  };
   state: ExerciseState;
   angle: number | null;
   observation: ObservationQuality;
@@ -63,6 +69,7 @@ export interface ExerciseAnalysisResult {
   result: ExerciseResult;
 }
 export interface ExerciseAnalyzer {
+  confirmSideView(): void;
   reset(): void;
   analyze(points: PoseLandmarks, timestamp: number, aspect: number, sourceReason?: UnavailableSourceReason): ExerciseAnalysisResult;
   interrupt(timestamp: number, reason: 'tracking_gap' | 'timeline_reset'): ExerciseAnalysisResult;
@@ -111,11 +118,13 @@ const pointNames: Record<number, string> = {
 export function reasonText(reason: ObservationReason): string {
   switch (reason.code) {
     case 'no_pose': return 'Человек не обнаружен.';
-    case 'missing_points': return `Не видны или ненадёжны точки: ${reason.landmarks?.map(i => pointNames[i] ?? i).join(', ')}.`;
+    case 'missing_points': return `Не видны или ненадёжны точки: ${reason.landmarks?.map(i => pointNames[i] ?? i).join(', ')}. Отойдите от камеры и уберите перекрытия этой стороны тела.`;
     case 'invalid_geometry': return 'Геометрия точек не позволяет вычислить критерий.';
     case 'tracking_gap': return 'Длительный разрыв отслеживания — движение разделено.';
     case 'timeline_reset': return 'Время видео изменилось — требуется новая верхняя точка.';
     case 'movement_pending': return 'Недостаточно наблюдений завершённого движения.';
+    case 'unsuitable_view': return 'Повернитесь боком к камере: плечи и таз должны перекрываться в проекции.';
+    case 'view_unknown': return 'Ракурс не удалось определить. Сверьтесь с примером съёмки сбоку.';
     case 'source_unavailable': return 'Новые видеокадры не поступают.';
     case 'detector_error': return 'Не удалось обработать видеокадр. Попробуйте перезапустить тренировку.';
   }

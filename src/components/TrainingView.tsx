@@ -31,16 +31,21 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
     analysis,
     status,
     started,
+    starting,
     seconds,
     session,
     start,
     finish,
+    confirmSideView,
+    seek,
+    restart,
   } = useTraining({ exercise, mode, videoUrl });
   const {
     enabled: voiceEnabled,
     setEnabled: setVoiceEnabled,
     supported: voiceSupported,
-  } = useVoiceFeedback(started && analysis.observation.status === 'ready', analysis.feedback[0]);
+  } = useVoiceFeedback(started && analysis.state !== 'Оценка приостановлена' &&
+    (analysis.preparation.stage === 'active' || analysis.preparation.stage === 'ready'), analysis.feedback[0]);
   const onFile = (file?: File) => {
     if (!file) return;
     setVideoUrl(URL.createObjectURL(file));
@@ -112,6 +117,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           </section>
         )}
         <div className='result-actions'>
+          {mode === 'video' && <button className='button' onClick={restart}>Повторить запись с нуля</button>}
           <button className='button button-primary' onClick={onHome}>
             Новая тренировка <span>↗</span>
           </button>
@@ -147,7 +153,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           <div className='camera-top'>
             <span className='live-label'>
               <i />
-              {started ? analysis.observation.status === 'ready' ? 'АНАЛИЗ ИДЁТ' : 'ОЦЕНКА НА ПАУЗЕ' : 'ОЖИДАНИЕ'}
+              {started ? ({ preparing: 'ПОДГОТОВКА', ready: 'ГОТОВНОСТЬ', active: 'ПОДХОД', recovering: 'ВОССТАНОВЛЕНИЕ' }[analysis.preparation.stage]) : 'ОЖИДАНИЕ'}
             </span>
             <span className='top-right'>
               {mode === 'demo'
@@ -162,6 +168,8 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
               ref={videoRef}
               muted
               playsInline
+              controls={mode === 'video' && started}
+              onSeeking={seek}
               className='feed'
               style={{ display: mode === 'demo' ? 'none' : 'block' }}
             />
@@ -210,9 +218,9 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
                 <button
                   className='button button-primary'
                   onClick={() => void start()}
-                  disabled={mode === 'video' && !videoUrl}
+                  disabled={starting || (mode === 'video' && !videoUrl)}
                 >
-                  {mode === 'camera'
+                  {starting ? 'Подготовка…' : mode === 'camera'
                     ? 'Разрешить доступ к камере'
                     : mode === 'video'
                       ? 'Запустить анализ'
@@ -229,6 +237,25 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           </div>
         </section>
         <aside className='dashboard'>
+          {exercise === 'squat' && <section className='camera-guide' aria-label='Подготовка камеры для приседаний сбоку'>
+            <strong>Приседания без веса · съёмка сбоку</strong>
+            <svg viewBox='0 0 320 125' role='img' aria-label='Камера на уровне таза направлена на человека в профиль; плечо, таз, колено и лодыжка остаются в кадре'>
+              <g fill='none' stroke='currentColor' strokeWidth='4' strokeLinecap='round' strokeLinejoin='round'>
+                <rect x='20' y='49' width='28' height='22' rx='4' /><path d='m48 55 14-7v25l-14-8M34 72v37m0-22-13 22m13-22 13 22' />
+                <path d='M80 61h62' strokeDasharray='5 7' strokeWidth='2' />
+                <circle cx='190' cy='18' r='10' /><path d='m190 29 0 37 5 23v22h18M190 37l20 14h20' />
+                <circle cx='190' cy='37' r='3' /><circle cx='190' cy='66' r='3' /><circle cx='195' cy='89' r='3' />
+                <path d='M165 4h77v112h-77z' strokeDasharray='4 6' strokeWidth='1' />
+              </g>
+              <text x='17' y='123' fill='currentColor' fontSize='10'>КАМЕРА</text><text x='250' y='63' fill='currentColor' fontSize='11'>ПРОФИЛЬ</text>
+            </svg>
+            <p>Поставьте камеру примерно на уровне таза, без наклона. Отойдите, чтобы плечо, таз, колено и лодыжка ближней стороны оставались в кадре весь подход. Удерживайте верхнюю позицию около половины секунды.</p>
+            {started && <>
+              <p><b>Ракурс:</b> {({ side: 'похож на боковой (эвристика)', unsuitable: 'повернитесь боком', unknown: 'не удалось определить', not_required: 'не проверяется' }[analysis.preparation.view])}</p>
+              {analysis.preparation.view === 'unknown' && !analysis.preparation.viewConfirmed && analysis.observation.status === 'ready' && <button className='button' onClick={confirmSideView}>Подтверждаю съёмку сбоку по примеру</button>}
+              <p role='status'>{analysis.preparation.message}</p>
+            </>}
+          </section>}
           <div className='dashboard-title'>
             <span>ПАНЕЛЬ ТРЕНИРОВКИ</span>
             <button
@@ -298,7 +325,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           <div className='score-row'>
             <div>
               <span className='metric-label'>НАБЛЮДЕНИЕ</span>
-              <strong>{!started ? 'Ожидание' : analysis.observation.status === 'ready' ? 'Данных достаточно' : 'Недостаточно данных'}</strong>
+              <strong>{!started ? 'Ожидание' : analysis.observation.status === 'ready' ? 'Нужные точки видны' : 'Недостаточно данных'}</strong>
               <small>Неполных: {analysis.result.incomplete} · Не оценено: {analysis.result.unassessed} · С замечаниями: {analysis.result.withErrors}</small>
             </div>
           </div>
@@ -310,12 +337,12 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           <div className='feedback'>
             <span className='metric-label'>ПОДСКАЗКИ В РЕАЛЬНОМ ВРЕМЕНИ</span>
             <div
-              className={`feedback-message ${analysis.feedback.length || (started && analysis.observation.status !== 'ready') ? 'warning' : ''}`}
+              className={`feedback-message ${analysis.feedback.length || (started && analysis.state === 'Оценка приостановлена') ? 'warning' : ''}`}
             >
-              <span>{analysis.feedback.length || analysis.observation.status !== 'ready' ? '!' : '·'}</span>
+              <span>{analysis.feedback.length || analysis.state === 'Оценка приостановлена' ? '!' : '·'}</span>
               <p>
-                {started && analysis.observation.status !== 'ready'
-                  ? `Оценка приостановлена. ${analysis.observation.reasons[0] ? reasonText(analysis.observation.reasons[0]) : 'Проверьте видимость нужных точек.'}`
+                {started && (analysis.state === 'Оценка приостановлена' || analysis.preparation.stage === 'preparing' || analysis.preparation.stage === 'recovering')
+                  ? analysis.preparation.message
                   : analysis.feedback[0]?.message ??
                   (started
                     ? 'Наблюдаем движение. Итог проверок появится в разборе попыток.'
@@ -333,6 +360,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
         </aside>
       </div>
       <p className='workout-note'>
+        {mode === 'video' && 'Запись анализируется один раз. Перемотка прерывает попытку и требует новой исходной позиции; повторный запуск сбрасывает счётчики. '}
         {mode === 'demo'
           ? 'В демо используется заранее заданная последовательность точек; распознавание камерой здесь не выполняется.'
           : 'Видеокадры обрабатываются на этом устройстве. Результат зависит от освещения и ракурса.'}
