@@ -32,7 +32,8 @@ describe('account persistence and failure handling',() => {
     const record=new TrainingController('squat','demo',snapshot.goal,'',0,run.createdAt,run.id).finish(1000,1000);
     fetch.mockRejectedValueOnce(new TypeError('response lost'));
     await expect(persistence.save(record)).rejects.toMatchObject({code:'NETWORK'});
-    fetch.mockResolvedValueOnce(new Response('{}')); await persistence.save(record);
+    const receipt={reason:'demo',xp:0,earnedAt:'2026-10-20T10:00:03Z',achievements:[]};
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({result:{reward:receipt}}))); expect(await persistence.save(record)).toEqual(receipt);
     expect(fetch.mock.calls[2][0]).toEqual(fetch.mock.calls[3][0]);
     expect(fetch.mock.calls[2][1].body).toEqual(fetch.mock.calls[3][1].body);
     expect(fetch.mock.calls[3][0]).toBe('/api/runs/server-run/complete');

@@ -1,10 +1,11 @@
 import type { WorkoutRecord, TrainingGoal } from '../training/session';
 import type { ExerciseType, InputMode } from '../exercises/types';
 import { isProgram, type HistoryRecord, type ProgramRecord, type ProgramSnapshot } from '../../shared/program';
+import type { RewardReceipt } from '../../shared/progression';
 export interface User { id: string; login: string; nickname: string; avatar: string; createdAt: string }
 export interface AccountResult {
   id: string; runId: string | null; source: 'training' | 'historical_import'; sourceVersion: number;
-  originalId: string | null; createdAt: string; archivedAt: string | null; record: HistoryRecord;
+  originalId: string | null; createdAt: string; archivedAt: string | null; record: HistoryRecord; reward?: RewardReceipt;
 }
 export function accountHistoryExport(results:AccountResult[]) {
   return {schemaVersion:1,records:results.filter(r=>!isProgram(r.record)).map(r=>({...r.record,id:r.id})),programs:results.filter(r=>isProgram(r.record)).map(r=>r.record),accountResults:results.map(({record,...provenance})=>({...provenance,recordId:record.id}))};
@@ -27,7 +28,7 @@ export const messageOf = (error: unknown) => error instanceof Error ? error.mess
 export type RunSnapshot = { exercise: ExerciseType; mode: InputMode; goal: TrainingGoal; conditions: string };
 export interface TrainingPersistence {
   begin(snapshot: RunSnapshot): Promise<{id:string;createdAt:string}>;
-  save(record:WorkoutRecord): Promise<void>;
+  save(record:WorkoutRecord): Promise<RewardReceipt | void>;
 }
 export class ProgramPersistence {
   private requestId = crypto.randomUUID();
@@ -37,7 +38,7 @@ export class ProgramPersistence {
     if (JSON.stringify(snapshot) !== JSON.stringify(this.snapshot)) {this.requestId=crypto.randomUUID();this.snapshot=structuredClone(snapshot);}
     return api<{id:string;createdAt:string; snapshot:ProgramSnapshot}>('/runs',{method:'POST',body:{...snapshot,requestId:this.requestId},userId:this.userId});
   }
-  async save(record:ProgramRecord) { await api(`/runs/${encodeURIComponent(record.id)}/complete`,{method:'POST',body:{record},userId:this.userId}); }
+  async save(record:ProgramRecord) { const data = await api<{result?:AccountResult}>(`/runs/${encodeURIComponent(record.id)}/complete`,{method:'POST',body:{record},userId:this.userId}); return data.result?.reward; }
 }
 // A failed begin retains its request ID. A failed completion retains its run ID and payload.
 export class AccountPersistence {
@@ -51,6 +52,7 @@ export class AccountPersistence {
     return run;
   }
   async save(record: WorkoutRecord) {
-    await api(`/runs/${encodeURIComponent(record.id)}/complete`, { method:'POST', body:{ record }, userId:this.userId });
+    const data = await api<{result?:AccountResult}>(`/runs/${encodeURIComponent(record.id)}/complete`, { method:'POST', body:{ record }, userId:this.userId });
+    return data.result?.reward;
   }
 }

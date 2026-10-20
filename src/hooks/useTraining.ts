@@ -16,6 +16,7 @@ import { VideoTimeline } from '../pose/videoTimeline';
 import { TrainingController, phaseLabels, type SessionPhase, type TrainingGoal, type WorkoutRecord } from '../training/session';
 import { HistoryStore } from '../training/history';
 import { messageOf, type TrainingPersistence } from '../account/api';
+import type { RewardReceipt } from '../../shared/progression';
 
 
 interface Options {
@@ -47,13 +48,14 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions, persis
   const [restSeconds, setRestSeconds] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [reward, setReward] = useState<RewardReceipt | null>(null);
   const saveBusy = useRef(false);
   const finalRecord = useRef<WorkoutRecord | null>(null);
   const saveRecord = async (record: WorkoutRecord) => {
     if (saveBusy.current) return;
     saveBusy.current = true; setSaving(true); setSaveError(null);
     try {
-      if (persistence) await persistence.save(record);
+      if (persistence) { const receipt = await persistence.save(record); setReward(receipt ?? null); }
       else {
         const error = new HistoryStore().save(record);
         if (error) throw new Error(error);
@@ -163,6 +165,7 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions, persis
     setAnalysis(analyzerRef.current.snapshot());
     setSeconds(0);
     setSession(null);
+    setReward(null);
     setSaveError(null);
     finalRecord.current = null;
     controllerRef.current = null;
@@ -351,6 +354,7 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions, persis
     restSeconds,
     saveError,
     saving,
+    reward,
     pause,
     resume,
     endSet,

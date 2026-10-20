@@ -12,6 +12,7 @@ import { combineResults, phaseLabels, validGoal } from '../training/session';
 import { downloadJson } from '../training/history';
 import { WorkoutDetails } from './HistoryView';
 import { Icon } from './Icon';
+import { RewardNotice } from '../account/ProgressionViews';
 
 
 interface Props {
@@ -57,7 +58,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
     confirmSideView,
     seek,
     restart,
-    phase, setNumber, restSeconds, pause, resume, endSet, saveError, saving, retrySave,
+    phase, setNumber, restSeconds, pause, resume, endSet, saveError, saving, retrySave, reward,
   } = useTraining({ exercise, mode, videoUrl, goal, conditions, persistence });
   const {
     enabled: voiceEnabled,
@@ -102,6 +103,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
             <strong>{result.unassessed}</strong>
           </div>
         </div>
+        {!saving && !saveError && <RewardNotice reward={reward} guest={!persistence}/>}
         <div className='recommend'>
           <span className='recommend-symbol'>✦</span>
           <div>

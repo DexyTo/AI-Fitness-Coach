@@ -6,6 +6,7 @@ import type { WorkoutRecord, TrainingGoal } from '../shared/workout.js';
 import { importSchema, obj, snapshotSchema, workoutSchema } from './workoutSchema.js';
 import { availablePrograms, registerPrograms, programRecordSchema, programSnapshotSchema } from './programs.js';
 import { isProgram, same, validPlan, validProgramRecord, type HistoryRecord, type ProgramSnapshot } from '../shared/program.js';
+import { accountCompletion, progression, receipt, RULES_VERSION } from './progression.js';
 
 export class ApiError extends Error {
   constructor(readonly statusCode: number, readonly code: string, message: string) { super(message); }
@@ -25,19 +26,19 @@ async function passwordHash(password: string) {
   return `scrypt-65536-8-1$${salt}$${(await derive(password, salt)).toString('hex')}`;
 }
 interface User { id: string; login: string; nickname: string; avatar: string; createdAt: string }
-interface ResultRow { id: string; run_id: string | null; source: string; source_version: number; original_id: string | null; record_json: string; created_at: string; archived_at: string | null }
+interface ResultRow { id: string; user_id: string; run_id: string | null; source: string; source_version: number; original_id: string | null; record_json: string; created_at: string; archived_at: string | null }
 type Snapshot = { exercise: WorkoutRecord['exercise']; mode: WorkoutRecord['mode']; goal: TrainingGoal; conditions: string } | ProgramSnapshot;
 const userColumns = 'u.id, u.login, u.nickname, u.avatar, u.created_at AS createdAt';
 const idSchema = { type: 'string', minLength: 1, maxLength: 128 };
 const credentials = obj({ login: { type: 'string', pattern: '^[a-zA-Z0-9_]{3,32}$' }, password: { type: 'string', minLength: 8, maxLength: 128 } });
 const emptyQuery = obj({});
-const serializedResult = (row: ResultRow) => ({ id: row.id, runId: row.run_id, source: row.source, sourceVersion: row.source_version, originalId: row.original_id, createdAt: row.created_at, archivedAt: row.archived_at, record: JSON.parse(row.record_json) as HistoryRecord });
 function validateRecord(value: unknown): asserts value is WorkoutRecord {
   if (!isWorkoutRecord(value) || value.sets.reduce((n,s) => n + s.result.attempts.length,0) > 5000 ||
     value.sets.some(s => s.observation.sampledMs > s.durationMs + 1) ||
     value.sets.reduce((n,s) => n + s.durationMs,0) > value.duration * 1000 + 1) fail(400, 'INVALID_RESULT', 'Результат содержит несогласованные показатели.');
 }
 export function registerAccounts(app: FastifyInstance, db: Database.Database) {
+  const serializedResult = (row: ResultRow) => ({ id: row.id, runId: row.run_id, source: row.source, sourceVersion: row.source_version, originalId: row.original_id, createdAt: row.created_at, archivedAt: row.archived_at, record: JSON.parse(row.record_json) as HistoryRecord, reward: receipt(db,row.user_id,row.id,row.source) });
   const token = (req: FastifyRequest) => {
     const candidate = req.headers.cookie?.split(';').map(v => v.trim()).find(v => v.startsWith('playfit_session='))?.slice(16);
     return candidate && /^[a-f0-9]{64}$/.test(candidate) ? candidate : null;
@@ -138,13 +139,13 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
       if (!validPlan(plan) || !template || !same({...plan,steps:plan.steps.map(s => ({id:s.id,exercise:s.exercise}))},{...template,steps:template.steps.map(s => ({id:s.id,exercise:s.exercise}))})) fail(409,'PROGRAM_CHANGED','Шаблон изменился или недоступен. Открой программу заново.');
     }
     const id = row?.id ?? randomUUID(), createdAt = row?.created_at ?? new Date().toISOString();
-    if (!row) db.prepare('INSERT INTO workout_runs VALUES (?,?,?,?,?)').run(id,user.id,req.body.requestId,json,createdAt);
+    if (!row) db.prepare('INSERT INTO workout_runs (id,user_id,request_id,snapshot_json,created_at,reward_rules_version) VALUES (?,?,?,?,?,?)').run(id,user.id,req.body.requestId,json,createdAt,RULES_VERSION);
     return reply.code(row ? 200 : 201).send({ id, snapshot, createdAt });
   });
   const findResult = (userId: string, id: string) => db.prepare('SELECT * FROM workout_results WHERE id=? AND user_id=?').get(id,userId) as ResultRow | undefined;
   app.post<{ Params: { id: string }; Body: { record: HistoryRecord } }>('/api/runs/:id/complete', { bodyLimit: 4 * 1024 * 1024, schema: { params: obj({ id:idSchema }), body: obj({ record:{anyOf:[workoutSchema,programRecordSchema]} }), querystring: emptyQuery } }, async (req,reply) => {
     const user = requireUser(req);
-    const run = db.prepare('SELECT * FROM workout_runs WHERE id=? AND user_id=?').get(req.params.id,user.id) as { snapshot_json: string } | undefined;
+    const run = db.prepare('SELECT * FROM workout_runs WHERE id=? AND user_id=?').get(req.params.id,user.id) as { snapshot_json: string; reward_rules_version: string | null } | undefined;
     if (!run) fail(404,'NOT_FOUND','Запуск не найден.');
     const record = req.body.record;
     if (isProgram(record)) {
@@ -154,11 +155,26 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
     const resultSnapshot: Snapshot = isProgram(record) ? {kind:'program',program:record.program,mode:record.mode,conditions:record.conditions} : {exercise:record.exercise,mode:record.mode,goal:record.goal,conditions:record.conditions};
     if (record.id !== req.params.id || canonical(resultSnapshot) !== canonical(snapshot) || (isProgram(record) && record.date !== (db.prepare('SELECT created_at FROM workout_runs WHERE id=?').get(req.params.id) as {created_at:string}).created_at)) fail(409,'SNAPSHOT_MISMATCH','Результат не соответствует цели запуска.');
     const json = canonical(record);
-    const existing = db.prepare('SELECT * FROM workout_results WHERE run_id=? AND user_id=?').get(req.params.id,user.id) as ResultRow | undefined;
-    if (existing && existing.record_json !== json) fail(409,'RESULT_CONFLICT','Запуск уже завершён с другим результатом.');
-    const id = existing?.id ?? randomUUID();
-    if (!existing) db.prepare("INSERT INTO workout_results (id,user_id,run_id,source,source_version,record_json,created_at) VALUES (?,?,?,'training',?,?,?)").run(id,user.id,req.params.id,isProgram(record) ? 2 : 1,json,new Date().toISOString());
-    return reply.code(existing ? 200 : 201).send({ result: serializedResult(findResult(user.id,id)!) });
+    const saved = db.transaction(() => {
+      const existing = db.prepare('SELECT * FROM workout_results WHERE run_id=? AND user_id=?').get(req.params.id,user.id) as ResultRow | undefined;
+      if (existing && existing.record_json !== json) fail(409,'RESULT_CONFLICT','Запуск уже завершён с другим результатом.');
+      const id = existing?.id ?? randomUUID();
+      if (!existing) {
+        const eventAt = new Date().toISOString();
+        db.prepare("INSERT INTO workout_results (id,user_id,run_id,source,source_version,record_json,created_at) VALUES (?,?,?,'training',?,?,?)").run(id,user.id,req.params.id,isProgram(record) ? 2 : 1,json,eventAt);
+        accountCompletion(db,user.id,id,record,run.reward_rules_version,eventAt);
+      }
+      return { existing:!!existing, result:serializedResult(findResult(user.id,id)!) };
+    }).immediate();
+    return reply.code(saved.existing ? 200 : 201).send({ result:saved.result });
+  });
+  app.get('/api/me/progression', { schema:{ querystring:emptyQuery } }, async req => {
+    const user = requireUser(req);
+    return { progression:progression(db,user.id) };
+  });
+  app.get('/api/me/overview', { schema:{ querystring:emptyQuery } }, async req => {
+    const user = requireUser(req);
+    return { progression:progression(db,user.id), recent:(db.prepare('SELECT * FROM workout_results WHERE user_id=? AND archived_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 3').all(user.id) as ResultRow[]).map(serializedResult) };
   });
   app.get('/api/history', { schema: { querystring:emptyQuery } }, async req => {
     const user = requireUser(req);

@@ -13,6 +13,7 @@ import { readSelection, selectionSearch } from './routing/selection';
 import './style.css';
 import { ProgramCatalog, ProgramDetails } from './programs/ProgramViews';
 import { ProgramEditor } from './programs/ProgramEditor';
+import { OverviewView } from './account/ProgressionViews';
 
 export default function App() {
   const { user } = useAccount();
@@ -37,6 +38,7 @@ export default function App() {
     <header className='site-header'>
       <Link className='brand' to={{ pathname: '/', search }} aria-label='PlayFit Vision — главная'><span className='brand-icon' aria-hidden='true'>✳</span><span>PlayFit<span className='brand-accent'> Vision</span></span></Link>
       <nav aria-label='Основная навигация'>
+        {user && <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to='/overview'>Обзор</NavLink>}
         <NavLink end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to={{ pathname: '/', search }}>Тренировки</NavLink>
         <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to='/programs'>Программы</NavLink>
         <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to={{ pathname: '/history', search }}><Icon name='history' />История</NavLink>
@@ -47,7 +49,8 @@ export default function App() {
     <Routes>
     <Route path='/login' element={<AuthView key='login' />} />
     <Route path='/register' element={<AuthView key='register' register />} />
-    <Route path='/profile' element={<ProfileView />} />
+    <Route path='/profile' element={<ProfileView key={user?.id} />} />
+    <Route path='/overview' element={<OverviewView key={user?.id} />} />
     <Route path='/programs' element={<ProgramCatalog />} />
     <Route path='/my-programs' element={<ProgramCatalog key='mine' scope='mine' />} />
     <Route path='/favorites' element={<ProgramCatalog key='favorites' scope='favorites' />} />
