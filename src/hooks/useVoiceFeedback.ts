@@ -37,6 +37,7 @@ export function useVoiceFeedback(active: boolean, feedback?: ExerciseFeedback) {
     }
     if (!feedback) {
       lastSpoken.current = null;
+      if (supported) window.speechSynthesis.cancel();
       return;
     }
     if (!enabled || !supported || lastSpoken.current === feedback.code) return;

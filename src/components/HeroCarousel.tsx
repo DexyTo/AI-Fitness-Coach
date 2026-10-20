@@ -94,8 +94,8 @@ export function HeroCarousel() {
           )}
           {slide.kind === 'coach' && (
             <div className='art-score' aria-hidden='true'>
-              92<span>%</span>
-              <small>ТЕХНИКА</small>
+              ↗
+              <small>ПОДСКАЗКИ</small>
             </div>
           )}
           <span className='art-tag tag-a'>

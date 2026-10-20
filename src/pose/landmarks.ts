@@ -2,7 +2,13 @@ import type {
   PoseLandmarks,
   PosePoint,
   ExerciseType,
+  FeedbackCode,
+  CriterionResults,
+  ObservationQuality,
+  ObservationReason,
+  UnavailableSourceReason,
 } from '../exercises/types';
+import { calculateAngle, distance, trunkLean } from './geometry';
 
 
 export const L = {
@@ -40,7 +46,9 @@ export function visible(p?: PosePoint): p is PosePoint {
     !!p &&
     Number.isFinite(p.x) &&
     Number.isFinite(p.y) &&
-    (p.visibility ?? 1) >= 0.55 &&
+    Number.isFinite(p.visibility) &&
+    (p.visibility ?? 0) >= 0.55 &&
+    (p.presence === undefined || Number.isFinite(p.presence)) &&
     (p.presence ?? 1) >= 0.5 &&
     p.x >= 0.02 &&
     p.x <= 0.98 &&
@@ -49,33 +57,60 @@ export function visible(p?: PosePoint): p is PosePoint {
   );
 }
 
-export function goodSide(
-  points: PoseLandmarks,
-  exercise: ExerciseType,
-): [number, number, number, number] | null {
-  const sides: [number, number, number, number][] =
-    exercise === 'squat'
-      ? [
-          [11, 23, 25, 27],
-          [12, 24, 26, 28],
-        ]
-      : [
-          [11, 13, 15, 23],
-          [12, 14, 16, 24],
-        ];
-  const valid = sides.filter((side) => side.every((i) => visible(points[i])));
-  if (!valid.length) return null;
-  return valid.sort(
-    (a, b) =>
-      b.reduce((s, i) => s + (points[i].visibility ?? 1), 0) -
-      a.reduce((s, i) => s + (points[i].visibility ?? 1), 0),
-  )[0];
+export type BodySide = 'left' | 'right';
+
+export function criterionPoints(exercise: ExerciseType, side: BodySide): Partial<Record<FeedbackCode, number[]>> {
+  const offset = side === 'left' ? 0 : 1;
+  const motion = (exercise === 'squat' ? [23, 25, 27] : [11, 13, 15]).map(i => i + offset);
+  return {
+    depth: motion,
+    extension: motion,
+    [exercise === 'squat' ? 'lean' : 'line']: (exercise === 'squat' ? [11, 23] : [11, 23, 27]).map(i => i + offset),
+  };
 }
 
-export function fullBodyInFrame(points: PoseLandmarks): boolean {
-  return (
-    ([11, 12, 23, 24, 25, 26, 27, 28] as number[]).filter((i) =>
-      visible(points[i]),
-    ).length >= 6 && ([27, 28] as number[]).some((i) => visible(points[i]))
-  );
+// Each criterion uses one anatomical side. Never substitute an isolated opposite ankle.
+export function observePose(points: PoseLandmarks, exercise: ExerciseType, aspect: number, preferredSide: BodySide | null, sourceReason?: UnavailableSourceReason) {
+  const evaluate = (side: BodySide) => {
+    const requirements = criterionPoints(exercise, side);
+    const criteria: CriterionResults = {};
+    const reasons: ObservationReason[] = [];
+    let rawAngle: number | null = null;
+    for (const [key, indices] of Object.entries(requirements)) {
+      const code = key as FeedbackCode;
+      const missing = indices.filter(i => !visible(points[i]));
+      let value = NaN;
+      if (!missing.length && Number.isFinite(aspect) && aspect > 0) {
+        value = code === 'lean'
+          ? (distance(points[indices[0]], points[indices[1]], aspect) > 1e-4
+              ? trunkLean(points[indices[0]], points[indices[1]], aspect) : NaN)
+          : calculateAngle(points[indices[0]], points[indices[1]], points[indices[2]], aspect);
+      }
+      const reason: ObservationReason | null = !points.length
+        ? { code: sourceReason ?? 'no_pose', criterion: code }
+        : missing.length ? { code: 'missing_points', criterion: code, landmarks: missing }
+        : !Number.isFinite(value) ? { code: 'invalid_geometry', criterion: code } : null;
+      if (reason) reasons.push(reason);
+      const motion = code === 'depth' || code === 'extension';
+      if (motion && !reason) rawAngle = value;
+      criteria[code] = {
+        status: reason || motion ? 'unassessed'
+          : (code === 'lean' ? value > 43 : Math.abs(180 - value) > 27) ? 'deviation' : 'passed',
+        observedFrames: reason ? 0 : 1,
+        reasons: reason ? [reason] : motion ? [{ code: 'movement_pending', criterion: code }] : [],
+      };
+    }
+    const observation: ObservationQuality = {
+      status: rawAngle === null ? 'unavailable' : reasons.length ? 'partial' : 'ready',
+      side: points.length ? side : null,
+      reasons,
+    };
+    const confidence = [...new Set(Object.values(requirements).flat())]
+      .reduce((sum, i) => sum + (visible(points[i]) ? Math.min(points[i].visibility ?? 1, points[i].presence ?? 1) : 0), 0);
+    return { observation, criteria, rawAngle, confidence };
+  };
+  if (preferredSide) return evaluate(preferredSide);
+  const candidates = [evaluate('left'), evaluate('right')];
+  const rank = { ready: 2, partial: 1, unavailable: 0 };
+  return candidates.sort((a, b) => rank[b.observation.status] - rank[a.observation.status] || b.confidence - a.confidence)[0];
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { ExerciseType, InputMode } from '../exercises/types';
-import { feedbackText, labels } from '../exercises/types';
+import type { ExerciseType, InputMode, FeedbackCode } from '../exercises/types';
+import { criterionLabels, criterionStatusLabels, endReasonLabels, feedbackMessage, labels, outcomeLabels, reasonText } from '../exercises/types';
 import { useTraining } from '../hooks/useTraining';
 import { useVoiceFeedback } from '../hooks/useVoiceFeedback';
 
@@ -40,13 +40,13 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
     enabled: voiceEnabled,
     setEnabled: setVoiceEnabled,
     supported: voiceSupported,
-  } = useVoiceFeedback(started, analysis.feedback[0]);
+  } = useVoiceFeedback(started && analysis.observation.status === 'ready', analysis.feedback[0]);
   const onFile = (file?: File) => {
     if (!file) return;
     setVideoUrl(URL.createObjectURL(file));
   };
   if (session) {
-    const { result, averageScore, mainError } = session;
+    const { result, mainError } = session;
     return (
       <main className='results page-enter'>
         <div className='results-icon'>✓</div>
@@ -60,42 +60,64 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
         </p>
         <div className='result-grid'>
           <div className='result-tile'>
-            <span>Всего повторений</span>
+            <span>Полные повторы</span>
             <strong>{result.reps}</strong>
           </div>
           <div className='result-tile'>
-            <span>Правильных</span>
-            <strong>{result.correct}</strong>
+            <span>Неполные попытки</span>
+            <strong>{result.incomplete}</strong>
           </div>
           <div className='result-tile'>
-            <span>С замечаниями</span>
+            <span>Попытки с замечаниями</span>
             <strong>{result.withErrors}</strong>
           </div>
           <div className='result-tile'>
-            <span>Средняя техника</span>
-            <strong>{result.reps ? `${averageScore}%` : '—'}</strong>
+            <span>Не оценены из-за данных</span>
+            <strong>{result.unassessed}</strong>
           </div>
         </div>
         <div className='recommend'>
           <span className='recommend-symbol'>✦</span>
           <div>
-            <b>Рекомендация тренера</b>
+            <b>Результаты наблюдения</b>
             <p>
-              {!result.reps
-                ? 'Повторений пока нет. Попробуйте ещё раз, показав всё тело в кадре.'
-                : mainError
-                  ? feedbackText[mainError]
-                  : 'Отличная техника! Продолжайте в том же ритме.'}
+              {mainError ? feedbackMessage(exercise, mainError)
+                : result.unassessed ? 'Часть движений не удалось оценить. Ниже указаны недостающие данные.'
+                : result.reps ? 'В проверенных признаках полных повторов замечаний не обнаружено.'
+                : 'Завершённых движений не зафиксировано. Начните с верхней точки.'}
             </p>
+            <p>Полных повторов без обнаруженных замечаний: {result.withoutFindings}. Замечания учитываются независимо от исхода попытки.</p>
           </div>
         </div>
+        {result.attempts.length > 0 && (
+          <section className='attempt-report' aria-label='Разбор попыток'>
+            <h2>Разбор попыток</h2>
+            {result.attempts.map(attempt => (
+              <article className='attempt-item' key={attempt.id}>
+                <h3>#{attempt.id} · {outcomeLabels[attempt.outcome]}</h3>
+                <p>{endReasonLabels[attempt.endReason]} · Минимальный наблюдаемый угол: {attempt.minAngle}°</p>
+                {attempt.outcome === 'incomplete' && <p>Не засчитано: {attempt.remarks.includes('depth') ? 'нижняя точка не достигнута. ' : ''}{attempt.remarks.includes('extension') ? 'возврат к выпрямлению не завершён.' : ''}</p>}
+                {attempt.outcome === 'insufficient_data' && <p>Не засчитано: обязательные проверки имеют пропуски данных.{attempt.motionComplete ? ' По доступным точкам цикл движения виден, но полностью оценить его нельзя.' : ''}</p>}
+                {attempt.reasons.length > 0 && <ul>{[...new Set(attempt.reasons.map(reasonText))].map(text => <li key={text}>{text}</li>)}</ul>}
+                <ul className='criterion-list'>
+                  {Object.entries(attempt.criteria).map(([code, check]) => (
+                    <li key={code}>
+                      <b>{criterionLabels[code as FeedbackCode]}</b>: {criterionStatusLabels[check.status]}
+                      {check.reasons.length > 0 && <span> · {[...new Set(check.reasons.map(reasonText))].join(' ')}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </section>
+        )}
         <div className='result-actions'>
           <button className='button button-primary' onClick={onHome}>
             Новая тренировка <span>↗</span>
           </button>
         </div>
         <p className='disclaimer'>
-          Оценка приблизительная и не заменяет консультацию специалиста.
+          Проверки основаны на 2D-точках и приблизительных правилах. Отсутствие замечаний не подтверждает безопасность движения.
         </p>
       </main>
     );
@@ -125,7 +147,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           <div className='camera-top'>
             <span className='live-label'>
               <i />
-              {started ? 'АНАЛИЗ ИДЁТ' : 'ОЖИДАНИЕ'}
+              {started ? analysis.observation.status === 'ready' ? 'АНАЛИЗ ИДЁТ' : 'ОЦЕНКА НА ПАУЗЕ' : 'ОЖИДАНИЕ'}
             </span>
             <span className='top-right'>
               {mode === 'demo'
@@ -138,7 +160,6 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           <div className={`stage ${mode === 'demo' ? 'stage-demo' : ''}`}>
             <video
               ref={videoRef}
-              autoPlay
               muted
               playsInline
               className='feed'
@@ -276,23 +297,28 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           </div>
           <div className='score-row'>
             <div>
-              <span className='metric-label'>КАЧЕСТВО ТЕХНИКИ</span>
-              <strong>
-                {analysis.result.reps ? `${analysis.score}%` : '—'}
-              </strong>
+              <span className='metric-label'>НАБЛЮДЕНИЕ</span>
+              <strong>{!started ? 'Ожидание' : analysis.observation.status === 'ready' ? 'Данных достаточно' : 'Недостаточно данных'}</strong>
+              <small>Неполных: {analysis.result.incomplete} · Не оценено: {analysis.result.unassessed} · С замечаниями: {analysis.result.withErrors}</small>
             </div>
-            <div className='score-dial'>{analysis.result.reps ? '✦' : '○'}</div>
           </div>
+          {started && <ul className='criterion-list live-criteria'>
+            {Object.entries(analysis.criteria).map(([code, check]) => <li key={code}>
+              {criterionLabels[code as FeedbackCode]}: {criterionStatusLabels[check.status]}
+            </li>)}
+          </ul>}
           <div className='feedback'>
             <span className='metric-label'>ПОДСКАЗКИ В РЕАЛЬНОМ ВРЕМЕНИ</span>
             <div
-              className={`feedback-message ${analysis.feedback.length ? 'warning' : ''}`}
+              className={`feedback-message ${analysis.feedback.length || (started && analysis.observation.status !== 'ready') ? 'warning' : ''}`}
             >
-              <span>{analysis.feedback.length ? '!' : '✓'}</span>
+              <span>{analysis.feedback.length || analysis.observation.status !== 'ready' ? '!' : '·'}</span>
               <p>
-                {analysis.feedback[0]?.message ??
+                {started && analysis.observation.status !== 'ready'
+                  ? `Оценка приостановлена. ${analysis.observation.reasons[0] ? reasonText(analysis.observation.reasons[0]) : 'Проверьте видимость нужных точек.'}`
+                  : analysis.feedback[0]?.message ??
                   (started
-                    ? 'Продолжайте движение — следим за техникой.'
+                    ? 'Наблюдаем движение. Итог проверок появится в разборе попыток.'
                     : 'После запуска здесь появятся подсказки.')}
               </p>
             </div>

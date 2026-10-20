@@ -747,6 +747,33 @@ footer {
   color: #c9e989;
   font-size: 25px;
 }
+.score-row small {
+  display: block;
+  margin-top: 8px;
+  color: #9bad96;
+  line-height: 1.5;
+}
+.criterion-list {
+  padding-left: 20px;
+  line-height: 1.7;
+  text-align: left;
+}
+.live-criteria {
+  font-size: 12px;
+  margin: 0;
+  padding: 0 0 16px 16px;
+}
+.attempt-report {
+  margin: 28px 0;
+  text-align: left;
+}
+.attempt-item {
+  padding: 18px 0;
+  border-bottom: 1px solid #34413a;
+  overflow-wrap: anywhere;
+}
+.attempt-item h3 { margin: 0 0 8px; }
+.attempt-item p { line-height: 1.6; }
 .feedback {
   margin-top: 30px;
 }

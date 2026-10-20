@@ -5,12 +5,13 @@ import type {
   InputMode,
   PoseLandmarks,
   TrainingSession,
+  UnavailableSourceReason,
 } from '../exercises/types';
 import { createAnalyzer } from '../exercises/analyzer';
 import { demoPose } from '../pose/demo';
 import { clearPose, drawPose } from '../pose/drawing';
 import { closeDetector, getDetector } from '../pose/poseDetector';
-import { fullBodyInFrame } from '../pose/landmarks';
+import { reasonText } from '../exercises/types';
 
 
 interface Options {
@@ -37,6 +38,7 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
   const cancelRef = useRef(false),
     lastFrame = useRef(0),
     lastVideoTime = useRef(-1),
+    lastVideoFrameAt = useRef(0),
     lastUi = useRef(0);
   const stop = useCallback(() => {
     cancelRef.current = true;
@@ -65,7 +67,9 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
       1,
       Math.round((performance.now() - startAt.current) / 1000),
     );
-    const result = analyzerRef.current.snapshot().result;
+    const finalAnalysis = analyzerRef.current.finish(performance.now());
+    setAnalysis(finalAnalysis);
+    const result = finalAnalysis.result;
     const mainError = (Object.entries(result.errors).sort(
       (a, b) => b[1] - a[1],
     )[0]?.[0] ?? null) as TrainingSession['mainError'];
@@ -74,7 +78,6 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
       mode,
       duration,
       result,
-      averageScore: result.reps ? Math.round(result.scoreSum / result.reps) : 0,
       mainError,
     });
     stop();
@@ -114,14 +117,17 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
         if (!videoUrl) throw Error('Сначала выберите видеофайл.');
         if (!video) return;
         video.src = videoUrl;
-        video.loop = true;
-        await video.play();
+        video.loop = false;
       }
       const detector = mode === 'demo' ? null : await getDetector();
+      if (cancelRef.current) return;
+      // A short local recording must not play through while the model is loading.
+      if (mode === 'video' && video) await video.play();
       if (cancelRef.current) return;
       startAt.current = performance.now();
       lastFrame.current = 0;
       lastVideoTime.current = -1;
+      lastVideoFrameAt.current = startAt.current;
       lastUi.current = 0;
       setStarted(true);
       setStatus(
@@ -138,11 +144,13 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
         if (cancelRef.current) return;
         rafRef.current = requestAnimationFrame(tick);
         const now = performance.now();
-        if (now - lastFrame.current < 85) return;
+        const sourceEnded = mode === 'video' && video?.ended;
+        if (now - lastFrame.current < 85 && !sourceEnded) return;
         lastFrame.current = now;
         const canvas = canvasRef.current;
         if (!canvas) return;
         let points: PoseLandmarks = [];
+        let sourceReason: UnavailableSourceReason | undefined;
         let width = canvas.clientWidth,
           height = canvas.clientHeight;
         if (mode === 'demo') points = demoPose(exercise, now - startAt.current);
@@ -152,44 +160,46 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
           video.videoWidth &&
           video.currentTime !== lastVideoTime.current
         ) {
+          if (lastVideoTime.current >= 0 && (video.currentTime < lastVideoTime.current || video.currentTime - lastVideoTime.current > 0.7)) {
+            analyzerRef.current.interrupt(now, 'timeline_reset');
+          }
           lastVideoTime.current = video.currentTime;
+          lastVideoFrameAt.current = now;
           try {
             points = detector?.detectForVideo(video, now).landmarks[0] ?? [];
           } catch {
-            setStatus(
-              'Не удалось обработать видеокадр. Попробуйте перезапустить тренировку.',
-            );
+            // Send an unavailable observation through the same analyzer path.
+            points = [];
+            sourceReason = 'detector_error';
+          }
+        } else {
+          if (sourceEnded) {
+            finish();
             return;
           }
-        } else return;
+          if (now - lastVideoFrameAt.current < 250) return;
+          sourceReason = 'source_unavailable';
+        }
         if (width < 1 || height < 1) return;
         const aspect =
           mode === 'demo'
             ? width / height
             : (video?.videoWidth ?? width) / (video?.videoHeight ?? height);
-        if (points.length) {
-          drawPose(canvas, points, width, height);
-          if (mode === 'demo' || fullBodyInFrame(points)) {
-            const before = analyzerRef.current.snapshot().result.reps;
-            const current = analyzerRef.current.analyze(points, now, aspect);
-            if (now - lastUi.current > 130 || current.result.reps !== before) {
-              setAnalysis(current);
-              lastUi.current = now;
-            }
-            setStatus(
-              mode === 'demo'
-                ? 'Демо: смоделированные точки тела'
-                : 'Поза определена · анализ идёт на устройстве',
-            );
-          } else {
-            setStatus('Отойдите дальше — необходимо видеть тело полностью.');
-          }
-        } else {
-          clearPose(canvas);
-          setStatus(
-            'Человек не обнаружен. Проверьте освещение и положение камеры.',
-          );
+        if (points.length) drawPose(canvas, points, width, height);
+        else clearPose(canvas);
+        const before = analyzerRef.current.snapshot();
+        const current = analyzerRef.current.analyze(points, now, aspect, sourceReason);
+        if (now - lastUi.current > 130 || current.observation.status !== 'ready' ||
+            current.observation.status !== before.observation.status ||
+            current.result.attempts.length !== before.result.attempts.length) {
+          setAnalysis(current);
+          lastUi.current = now;
         }
+        setStatus(current.observation.status !== 'ready'
+          ? `Оценка приостановлена. ${reasonText(current.observation.reasons[0])}`
+          : mode === 'demo' ? 'Демо: смоделированные точки тела'
+          : 'Поза определена · анализ идёт на устройстве');
+        if (sourceEnded) finish();
       };
       rafRef.current = requestAnimationFrame(tick);
     } catch (error) {
