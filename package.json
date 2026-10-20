@@ -11,6 +11,7 @@
     "dev:client": "vite --host 127.0.0.1",
     "dev:server": "tsx watch --env-file-if-exists=.env server/index.ts",
     "db:migrate": "node --env-file-if-exists=.env --import tsx server/migrate.ts",
+    "db:seed:challenges": "node --env-file-if-exists=.env --import tsx server/seedChallenges.ts",
     "check:server": "tsc -p tsconfig.server.json --noEmit",
     "build:server": "tsc -p tsconfig.server.json",
     "start:server": "node --env-file-if-exists=.env .server-build/server/index.js",

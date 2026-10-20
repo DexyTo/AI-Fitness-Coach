@@ -22,7 +22,7 @@ function totals(db: Database.Database, userId: string) {
   const events = db.prepare('SELECT reps, exercises_json, project_day FROM progression_events WHERE user_id=? AND eligible=1').all(userId) as { reps: number; exercises_json: string; project_day: string }[];
   return { workouts: events.length, reps: events.reduce((n, e) => n + e.reps, 0), days: new Set(events.map(e => e.project_day)).size, exercises: new Set(events.flatMap(e => JSON.parse(e.exercises_json) as string[])).size };
 }
-const xpTotal = (db: Database.Database, userId: string, day?: string) => (db.prepare(`SELECT COALESCE(SUM(amount),0) AS xp FROM reward_ledger WHERE user_id=? AND currency='xp'${day ? ' AND project_day=?' : ''}`).get(...(day ? [userId, day] : [userId])) as { xp: number }).xp;
+const xpTotal = (db: Database.Database, userId: string, day?: string) => (db.prepare(`SELECT COALESCE(SUM(amount),0) AS xp FROM reward_ledger WHERE user_id=? AND currency='xp'${day ? " AND source_type='workout' AND project_day=?" : ''}`).get(...(day ? [userId, day] : [userId])) as { xp: number }).xp;
 
 // Internal extension point. Call only inside the source-event's immediate transaction,
 // after server-side validation; never expose an endpoint accepting client XP/points.
@@ -63,7 +63,7 @@ export function receipt(db: Database.Database, userId: string, resultId: string,
   const event = db.prepare('SELECT reason,event_at FROM progression_events WHERE user_id=? AND result_id=?').get(userId, resultId) as { reason: RewardReason; event_at: string } | undefined;
   const xp = (db.prepare("SELECT amount FROM reward_ledger WHERE user_id=? AND currency='xp' AND source_type='workout' AND source_id=?").get(userId, resultId) as { amount: number } | undefined)?.amount ?? 0;
   const earned = db.prepare('SELECT achievement_id FROM user_achievements WHERE user_id=? AND result_id=? ORDER BY achievement_id').all(userId, resultId) as { achievement_id: string }[];
-  return { reason: event?.reason ?? (source === 'historical_import' ? 'import' : 'legacy'), xp, earnedAt: event?.event_at ?? null, achievements: earned.map(r => achievements.find(a => a.id === r.achievement_id)?.title ?? r.achievement_id) };
+  return { reason: event?.reason ?? (source === 'historical_import' ? 'import' : 'legacy'), xp, earnedAt: event?.event_at ?? null, achievements: earned.map(r => r.achievement_id === 'first-challenge' ? 'Испытание пройдено' : achievements.find(a => a.id === r.achievement_id)?.title ?? r.achievement_id) };
 }
 export function progression(db: Database.Database, userId: string, now = new Date()): Progression {
   const stats = totals(db, userId);
@@ -75,6 +75,10 @@ export function progression(db: Database.Database, userId: string, now = new Dat
     const count = db.prepare('SELECT COUNT(*) AS n FROM progression_events WHERE user_id=? AND eligible=1 AND project_day=?').get(userId, day) as { n: number };
     return { day, workouts: count.n };
   });
-  return { ...levelFor(xpTotal(db, userId)), todayXp: xpTotal(db, userId, projectDay(now)), dailyLimit: DAILY_XP_LIMIT, workoutXp: WORKOUT_XP, timeZone: TIME_ZONE, stats, activity,
-    achievements: achievements.map(a => ({ id: a.id, title: a.title, description: a.description, target: a.target, progress: Math.min(stats[a.metric], a.target), earnedAt: earned.find(e => e.achievement_id === a.id)?.earned_at ?? null, reward: 'Значок в профиле · без бонусных XP' })) };
+  const challengeCount = (db.prepare('SELECT COUNT(*) AS n FROM challenge_participations WHERE user_id=? AND completed_at IS NOT NULL').get(userId) as { n: number }).n;
+  const competitionPoints = (db.prepare("SELECT COALESCE(SUM(amount),0) AS n FROM reward_ledger WHERE user_id=? AND currency='competition_points'").get(userId) as { n: number }).n;
+  const challengeXp = (db.prepare("SELECT COALESCE(SUM(amount),0) AS n FROM reward_ledger WHERE user_id=? AND currency='xp' AND source_type='challenge'").get(userId) as { n: number }).n;
+  return { ...levelFor(xpTotal(db, userId)), todayXp: xpTotal(db, userId, projectDay(now)), dailyLimit: DAILY_XP_LIMIT, workoutXp: WORKOUT_XP, timeZone: TIME_ZONE, stats, activity, competitionPoints, challengeXp,
+    achievements: [...achievements.map(a => ({ id: a.id, title: a.title, description: a.description, target: a.target, progress: Math.min(stats[a.metric], a.target), earnedAt: earned.find(e => e.achievement_id === a.id)?.earned_at ?? null, reward: 'Значок в профиле · без бонусных XP' })),
+      { id: 'first-challenge', title: 'Испытание пройдено', description: 'Выполни первое испытание', target: 1, progress: Math.min(1,challengeCount), earnedAt: earned.find(e => e.achievement_id === 'first-challenge')?.earned_at ?? null, reward: 'Значок в профиле · без бонусных XP' }] };
 }

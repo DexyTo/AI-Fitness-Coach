@@ -14,6 +14,7 @@ import './style.css';
 import { ProgramCatalog, ProgramDetails } from './programs/ProgramViews';
 import { ProgramEditor } from './programs/ProgramEditor';
 import { OverviewView } from './account/ProgressionViews';
+import { ChallengesPage, ChallengeDetails } from './challenges/ChallengeViews';
 
 export default function App() {
   const { user } = useAccount();
@@ -41,6 +42,7 @@ export default function App() {
         {user && <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to='/overview'>Обзор</NavLink>}
         <NavLink end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to={{ pathname: '/', search }}>Тренировки</NavLink>
         <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to='/programs'>Программы</NavLink>
+        <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to='/competitions'>Соревнования</NavLink>
         <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to={{ pathname: '/history', search }}><Icon name='history' />История</NavLink>
       </nav>
       <Link className='account-nav' to={user ? '/profile' : '/login'}>{user ? <><Avatar name={user.avatar} /><span>{user.nickname}</span></> : <><Icon name='shield' /><span>Войти</span></>}</Link>
@@ -51,6 +53,8 @@ export default function App() {
     <Route path='/register' element={<AuthView key='register' register />} />
     <Route path='/profile' element={<ProfileView key={user?.id} />} />
     <Route path='/overview' element={<OverviewView key={user?.id} />} />
+    <Route path='/competitions' element={<ChallengesPage key={user?.id}/>} />
+    <Route path='/competitions/challenges/:id' element={<ChallengeDetails key={`${user?.id}-${location.pathname}`}/>} />
     <Route path='/programs' element={<ProgramCatalog />} />
     <Route path='/my-programs' element={<ProgramCatalog key='mine' scope='mine' />} />
     <Route path='/favorites' element={<ProgramCatalog key='favorites' scope='favorites' />} />

@@ -7,6 +7,7 @@ import { importSchema, obj, snapshotSchema, workoutSchema } from './workoutSchem
 import { availablePrograms, registerPrograms, programRecordSchema, programSnapshotSchema } from './programs.js';
 import { isProgram, same, validPlan, validProgramRecord, type HistoryRecord, type ProgramSnapshot } from '../shared/program.js';
 import { accountCompletion, progression, receipt, RULES_VERSION } from './progression.js';
+import { activeChallenges, challengeReceipt, completeChallenge, registerChallenges } from './challenges.js';
 
 export class ApiError extends Error {
   constructor(readonly statusCode: number, readonly code: string, message: string) { super(message); }
@@ -38,7 +39,10 @@ function validateRecord(value: unknown): asserts value is WorkoutRecord {
     value.sets.reduce((n,s) => n + s.durationMs,0) > value.duration * 1000 + 1) fail(400, 'INVALID_RESULT', 'Результат содержит несогласованные показатели.');
 }
 export function registerAccounts(app: FastifyInstance, db: Database.Database) {
-  const serializedResult = (row: ResultRow) => ({ id: row.id, runId: row.run_id, source: row.source, sourceVersion: row.source_version, originalId: row.original_id, createdAt: row.created_at, archivedAt: row.archived_at, record: JSON.parse(row.record_json) as HistoryRecord, reward: receipt(db,row.user_id,row.id,row.source) });
+  const serializedResult = (row: ResultRow) => {
+    const challenge = challengeReceipt(db,row.id);
+    return { id: row.id, runId: row.run_id, source: row.source, sourceVersion: row.source_version, originalId: row.original_id, createdAt: row.created_at, archivedAt: row.archived_at, record: JSON.parse(row.record_json) as HistoryRecord, reward: { ...receipt(db,row.user_id,row.id,row.source), ...(challenge ? { challenge } : {}) } };
+  };
   const token = (req: FastifyRequest) => {
     const candidate = req.headers.cookie?.split(';').map(v => v.trim()).find(v => v.startsWith('playfit_session='))?.slice(16);
     return candidate && /^[a-f0-9]{64}$/.test(candidate) ? candidate : null;
@@ -63,6 +67,7 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
     reply.header('set-cookie', `playfit_session=${raw}; Path=/api; HttpOnly; SameSite=Strict; Max-Age=2592000`);
   };
   registerPrograms(app,db,requireUser,req => req.headers['x-playfit-user'] !== undefined ? requireUser(req) : current(req),fail);
+  registerChallenges(app,db,requireUser,req => req.headers['x-playfit-user'] !== undefined ? requireUser(req) : current(req),fail);
   const attempts = new Map<string, { count: number; until: number }>();
   let activeKdf = 0;
   async function authLimit(req: FastifyRequest, work: () => Promise<User>) {
@@ -163,6 +168,7 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
         const eventAt = new Date().toISOString();
         db.prepare("INSERT INTO workout_results (id,user_id,run_id,source,source_version,record_json,created_at) VALUES (?,?,?,'training',?,?,?)").run(id,user.id,req.params.id,isProgram(record) ? 2 : 1,json,eventAt);
         accountCompletion(db,user.id,id,record,run.reward_rules_version,eventAt);
+        completeChallenge(db,user.id,req.params.id,id,record,eventAt);
       }
       return { existing:!!existing, result:serializedResult(findResult(user.id,id)!) };
     }).immediate();
@@ -174,7 +180,7 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
   });
   app.get('/api/me/overview', { schema:{ querystring:emptyQuery } }, async req => {
     const user = requireUser(req);
-    return { progression:progression(db,user.id), recent:(db.prepare('SELECT * FROM workout_results WHERE user_id=? AND archived_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 3').all(user.id) as ResultRow[]).map(serializedResult) };
+    return { progression:progression(db,user.id), challenges:activeChallenges(db,user.id,new Date().toISOString()), recent:(db.prepare('SELECT * FROM workout_results WHERE user_id=? AND archived_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 3').all(user.id) as ResultRow[]).map(serializedResult) };
   });
   app.get('/api/history', { schema: { querystring:emptyQuery } }, async req => {
     const user = requireUser(req);

@@ -89,7 +89,7 @@ describe('server progression accounting', () => {
     for(let i=5;i<10;i++)await complete('camera','squat',10);
     const data=(await req('GET','/api/me/progression')).json().progression;
     expect(data).toMatchObject({xp:140,level:2,levelXp:40,todayXp:60,stats:{workouts:10,reps:100,days:3,exercises:2}});
-    expect(data.achievements.every((a:{earnedAt:string;progress:number;target:number})=>a.earnedAt&&a.progress===a.target)).toBe(true);
+    expect(data.achievements.filter((a:{id:string})=>a.id!=='first-challenge').every((a:{earnedAt:string;progress:number;target:number})=>a.earnedAt&&a.progress===a.target)).toBe(true);
     expect(data.activity.slice(-3).map((d:{workouts:number})=>d.workouts)).toEqual([4,1,5]);
     expect(db.prepare('SELECT COUNT(*) AS n FROM user_achievements').get()).toEqual({n:6});
     await complete(); expect(db.prepare('SELECT COUNT(*) AS n FROM user_achievements').get()).toEqual({n:6});
@@ -176,7 +176,7 @@ describe('server progression accounting', () => {
     const record=fixture('old-run','2026-10-01T00:00:00Z');
     db.prepare('INSERT INTO workout_runs VALUES (?,?,?,?,?)').run('old-run','old','old-request','{}',record.date);
     db.prepare("INSERT INTO workout_results (id,user_id,run_id,source,source_version,record_json,created_at) VALUES ('old-result','old','old-run','training',1,?,?)").run(JSON.stringify(record),record.date);
-    expect(migrate(db)).toEqual(['005_progression.sql']);expect(migrate(db)).toEqual([]);
+    expect(migrate(db)).toEqual(['005_progression.sql','006_challenges.sql']);expect(migrate(db)).toEqual([]);
     expect(db.prepare('SELECT reward_rules_version FROM workout_runs').get()).toEqual({reward_rules_version:null});
     expect(progression(db,'old').xp).toBe(0);expect(db.prepare('SELECT COUNT(*) AS n FROM workout_results').get()).toEqual({n:1});
   });
