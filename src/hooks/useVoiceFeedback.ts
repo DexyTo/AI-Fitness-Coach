@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ExerciseFeedback } from '../exercises/types';
 
-const storageKey = 'ai-fitness-coach-voice-enabled';
+const storageKey = 'playfit-vision-voice-enabled';
 
 export function useVoiceFeedback(active: boolean, feedback?: ExerciseFeedback) {
   const supported =

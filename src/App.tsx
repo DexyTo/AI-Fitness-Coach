@@ -17,12 +17,12 @@ export default function App() {
         <button
           className='brand'
           onClick={() => setPage('home')}
-          aria-label='AI Fitness Coach — главная'
+          aria-label='PlayFit Vision — главная'
         >
           <span className='brand-icon'>✳</span>
           <span>
-            AI<span className='brand-light'> FITNESS</span>
-            <span className='brand-accent'> COACH</span>
+            Play<span className='brand-light'>Fit</span>
+            <span className='brand-accent'> Vision</span>
           </span>
         </button>
         <nav>
@@ -153,7 +153,7 @@ export default function App() {
             </div>
           </section>
           <footer>
-            <span>✳ &nbsp; AI FITNESS COACH</span>
+            <span>✳ &nbsp; PlayFit Vision</span>
             <span>УЧЕБНЫЙ ПРОЕКТ · АНАЛИЗ НА УСТРОЙСТВЕ</span>
           </footer>
         </main>
