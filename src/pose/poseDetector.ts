@@ -1,7 +1,7 @@
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 
 
-let pending: Promise<PoseLandmarker> | null = null;
+let pending: ReturnType<typeof createDetectorWithMetadata> | null = null;
 
 export const detectorSettings = {
   runningMode: 'VIDEO' as const,
@@ -30,17 +30,18 @@ export async function createDetectorWithMetadata() {
   }
 }
 
-export function getDetector(): Promise<PoseLandmarker> {
+export function getDetectorWithMetadata() {
   if (!pending)
-    pending = createDetectorWithMetadata().then(({ detector }) => detector).catch((error) => {
+    pending = createDetectorWithMetadata().catch((error) => {
       pending = null;
       throw error;
     });
   return pending;
 }
+export async function getDetector(): Promise<PoseLandmarker> { return (await getDetectorWithMetadata()).detector; }
 export function closeDetector() {
   if (pending) {
-    void pending.then((detector) => detector.close()).catch(() => {});
+    void pending.then(({ detector }) => detector.close()).catch(() => {});
     pending = null;
   }
 }

@@ -1,6 +1,7 @@
 import type { AttemptOutcome, CriterionStatus, ExerciseType, FeedbackCode, MovementAttempt, ObservationQuality, ExerciseAnalysisResult } from '../exercises/types';
 
-export const RULES_VERSION = 'provisional-side-v1';
+export { RULES_VERSION } from '../exercises/config';
+import { RULES_VERSION } from '../exercises/config';
 export const PROTOCOL_VERSION = 'playfit-validation-v1';
 export const criteriaFor = (exercise: ExerciseType): FeedbackCode[] => ['depth', 'extension', exercise === 'squat' ? 'lean' : 'line'];
 export interface Interval { startMs: number; endMs: number }

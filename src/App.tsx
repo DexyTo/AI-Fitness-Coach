@@ -4,12 +4,13 @@ import { HeroCarousel } from './components/HeroCarousel';
 import { labels } from './exercises/types';
 import type { ExerciseType, InputMode } from './exercises/types';
 import './style.css';
+import { HistoryView } from './components/HistoryView';
 
 
 export default function App() {
   const [exercise, setExercise] = useState<ExerciseType>('squat');
   const [mode, setMode] = useState<InputMode>('camera');
-  const [page, setPage] = useState<'home' | 'training'>('home');
+  const [page, setPage] = useState<'home' | 'training' | 'history'>('home');
   
   return (
     <div className='app-shell'>
@@ -30,9 +31,10 @@ export default function App() {
           <button className='nav-link' onClick={() => setPage('home')}>
             Главная ↗
           </button>
+          <button className='nav-link' onClick={() => setPage('history')}>История ↗</button>
         </nav>
       </header>
-      {page === 'training' ? (
+      {page === 'history' ? <HistoryView onHome={() => setPage('home')} /> : page === 'training' ? (
         <TrainingView
           key={`${exercise}-${mode}`}
           exercise={exercise}

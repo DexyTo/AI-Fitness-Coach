@@ -6,6 +6,9 @@ import { variant } from '../exercises/config';
 import { AttemptReport } from './AttemptReport';
 import { useTraining } from '../hooks/useTraining';
 import { useVoiceFeedback } from '../hooks/useVoiceFeedback';
+import { combineResults, phaseLabels, validGoal } from '../training/session';
+import { downloadJson } from '../training/history';
+import { WorkoutDetails } from './HistoryView';
 
 
 interface Props {
@@ -17,11 +20,15 @@ interface Props {
 const pad = (n: number) => String(n).padStart(2, '0');
 
 function readable(seconds: number) {
-  return `${pad(Math.floor(seconds / 60))}:${pad(seconds % 60)}`;
+  const whole = Math.floor(seconds);
+  return `${pad(Math.floor(whole / 60))}:${pad(whole % 60)}`;
 }
 
 export function TrainingView({ exercise, mode, onHome }: Props) {
   const [videoUrl, setVideoUrl] = useState('');
+  const [goalFields, setGoalFields] = useState({ sets: '', reps: '', restSeconds: '' });
+  const [conditions, setConditions] = useState('');
+  const goal = { sets: Number(goalFields.sets || NaN), reps: Number(goalFields.reps || NaN), restSeconds: Number(goalFields.restSeconds || NaN) };
   useEffect(
     () => () => {
       if (videoUrl) URL.revokeObjectURL(videoUrl);
@@ -43,19 +50,21 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
     confirmSideView,
     seek,
     restart,
-  } = useTraining({ exercise, mode, videoUrl });
+    phase, setNumber, restSeconds, pause, resume, endSet, saveError, retrySave,
+  } = useTraining({ exercise, mode, videoUrl, goal, conditions });
   const {
     enabled: voiceEnabled,
     setEnabled: setVoiceEnabled,
     supported: voiceSupported,
-  } = useVoiceFeedback(started && !session && analysis.state !== 'Оценка приостановлена', cue);
+  } = useVoiceFeedback(started && phase === 'active' && !session && analysis.state !== 'Оценка приостановлена', cue);
+  const accepting = phase === 'active' || phase === 'preparing';
   const previousAttempt = analysis.result.attempts.at(-1);
   const onFile = (file?: File) => {
     if (!file) return;
     setVideoUrl(URL.createObjectURL(file));
   };
   if (session) {
-    const { result } = session;
+    const result = combineResults(session.sets.map(s => s.result));
     return (
       <main className='results page-enter'>
         <div className='results-icon'>✓</div>
@@ -109,11 +118,15 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           </section>
         )}
         <div className='result-actions'>
+          <button className='button' onClick={() => downloadJson({ schemaVersion: 1, records: [session] }, 'playfit-workout.json')}>Экспорт результата JSON</button>
+          {saveError && <button className='button' onClick={retrySave}>Повторить сохранение</button>}
           {mode === 'video' && <button className='button' onClick={restart}>Повторить запись с нуля</button>}
           <button className='button button-primary' onClick={onHome}>
             Новая тренировка <span>↗</span>
           </button>
         </div>
+        <p role={saveError ? 'alert' : 'status'} className={saveError ? 'storage-error' : 'muted'}>{saveError || 'Результат сохранён локально в истории этого браузера. Синхронизации между устройствами нет.'}</p>
+        <WorkoutDetails record={session} />
         <p className='disclaimer'>
           Проверки основаны на 2D-точках и приблизительных правилах. Отсутствие замечаний не подтверждает безопасность движения.
         </p>
@@ -140,12 +153,31 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           ◷ <span>{readable(seconds)}</span>
         </div>
       </div>
+      {!started && <fieldset className='session-goal' disabled={starting}>
+        <legend>Ваша цель · {labels[exercise]}</legend>
+        <p>Задайте собственные значения. Это счётная цель, а не персональная рекомендация нагрузки.</p>
+        <div className='goal-fields'>
+          <label>Подходы<input type='number' min='1' max='100' step='1' value={goalFields.sets} onChange={e => setGoalFields(v => ({ ...v, sets: e.target.value }))} /></label>
+          <label>Полные повторы в подходе<input type='number' min='1' max='1000' step='1' value={goalFields.reps} onChange={e => setGoalFields(v => ({ ...v, reps: e.target.value }))} /></label>
+          <label>Отдых, секунды<input type='number' min='0' max='3600' step='1' value={goalFields.restSeconds} onChange={e => setGoalFields(v => ({ ...v, restSeconds: e.target.value }))} /></label>
+        </div>
+        <label>Условия съёмки для сравнения<input type='text' maxLength={200} value={conditions} placeholder='Например: комната, камера сбоку, дневной свет' onChange={e => setConditions(e.target.value)} /></label>
+        <p>В цель входят только полные оценённые циклы. Замечания учитываются отдельно; неполные и неоценённые попытки цель не увеличивают. Достигнутый счёт завершает подход. Если условия не указаны, сравнение между записями отключено. Видео и координаты не сохраняются; результаты сохраняются только в этом браузере без синхронизации.</p>
+        {!validGoal(goal) && <p>Введите целые значения: подходы 1–100, повторы 1–1000, отдых 0–3600 секунд.</p>}
+      </fieldset>}
+      {started && <section className='session-controls' aria-label='Управление сессией'>
+        <p role='status'><b>{phaseLabels[phase]}</b> · Подход {setNumber}/{goal.sets} · {phase === 'next' ? `Цель следующего: ${goal.reps} полных` : `В текущем: ${analysis.result.reps}/${goal.reps} полных`}{phase === 'rest' ? ` · осталось ${restSeconds} с` : ''}</p>
+        {!accepting && <p>Движения не учитываются, технические подсказки выключены. Перед продолжением снова удерживайте исходную позицию.</p>}
+        {accepting && <button className='button' onClick={pause}>Пауза</button>}
+        {(phase === 'paused' || phase === 'next') && <button className='button button-primary' onClick={() => void resume()}>{phase === 'next' ? 'Начать следующий подход' : 'Продолжить с подготовки'}</button>}
+        {(accepting || phase === 'paused') && <button className='button' onClick={endSet}>Завершить подход</button>}
+      </section>}
       <div className='workout-grid'>
         <section className='camera-card' aria-label='Область анализа движения'>
           <div className='camera-top'>
             <span className='live-label'>
               <i />
-              {started ? ({ preparing: 'ПОДГОТОВКА', ready: 'ГОТОВНОСТЬ', active: 'ПОДХОД', recovering: 'ВОССТАНОВЛЕНИЕ' }[analysis.preparation.stage]) : 'ОЖИДАНИЕ'}
+              {started ? phaseLabels[phase] : 'ОЖИДАНИЕ'}
             </span>
             <span className='top-right'>
               {mode === 'demo'
@@ -160,7 +192,8 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
               ref={videoRef}
               muted
               playsInline
-              controls={mode === 'video' && started}
+              controls={mode === 'video' && started && accepting}
+              onPause={() => { if (mode === 'video' && started && accepting && !videoRef.current?.ended) pause(); }}
               onSeeking={seek}
               className='feed'
               style={{ display: mode === 'demo' ? 'none' : 'block' }}
@@ -210,7 +243,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
                 <button
                   className='button button-primary'
                   onClick={() => void start()}
-                  disabled={starting || (mode === 'video' && !videoUrl)}
+                  disabled={starting || !validGoal(goal) || (mode === 'video' && !videoUrl)}
                 >
                   {starting ? 'Подготовка…' : mode === 'camera'
                     ? 'Разрешить доступ к камере'
@@ -242,7 +275,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
               <text x='17' y='123' fill='currentColor' fontSize='10'>КАМЕРА</text><text x='250' y='63' fill='currentColor' fontSize='11'>ПРОФИЛЬ</text>
             </svg>
             <p>Поставьте камеру примерно на уровне таза, без наклона. Отойдите, чтобы плечо, таз, колено и лодыжка ближней стороны оставались в кадре весь подход. Удерживайте верхнюю позицию около половины секунды.</p>
-            {started && <>
+            {started && accepting && <>
               <p><b>Ракурс:</b> {({ side: 'похож на боковой (эвристика)', unsuitable: 'повернитесь боком', unknown: 'не удалось определить', not_required: 'не проверяется' }[analysis.preparation.view])}</p>
               {analysis.preparation.view === 'unknown' && !analysis.preparation.viewConfirmed && analysis.observation.status === 'ready' && <button className='button' onClick={confirmSideView}>Подтверждаю съёмку сбоку по примеру</button>}
             </>}
@@ -286,7 +319,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           </div>
           <p className='variant-note'>Вариант: {exercise === 'squat' ? 'без веса, сбоку' : 'отжимания сбоку'} · {variant(exercise).id}. Правила предварительные.</p>
           <div className='rep-block'>
-            <span className='metric-label'>ПОВТОРЕНИЯ</span>
+            <span className='metric-label'>{phase === 'rest' || phase === 'next' ? 'ПОЛНЫЕ В ПРЕДЫДУЩЕМ ПОДХОДЕ' : 'ПОВТОРЕНИЯ'}</span>
             <div className='rep-value'>
               {pad(analysis.result.reps)}
               <span className='rep-suffix'> REP</span>
@@ -294,21 +327,21 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
             <div className='progress-track'>
               <div
                 style={{
-                  width: `${Math.min(100, analysis.result.reps * 10)}%`,
+                  width: `${Math.min(100, analysis.result.reps / goal.reps * 100) || 0}%`,
                 }}
               />
             </div>
-            <small>Каждый полный цикл движения</small>
+            <small>Полные циклы {phase === 'rest' || phase === 'next' ? 'предыдущего' : 'текущего'} подхода · цель {validGoal(goal) ? goal.reps : 'не задана'}</small>
           </div>
           <div className='mini-metrics'>
             <div>
               <span className='metric-label'>ФАЗА ДВИЖЕНИЯ</span>
-              <strong>{analysis.state}</strong>
+              <strong>{accepting ? analysis.state : phaseLabels[phase]}</strong>
             </div>
             <div>
               <span className='metric-label'>УГОЛ СУСТАВА</span>
               <strong>
-                {started && analysis.angle !== null
+                {started && accepting && analysis.angle !== null
                   ? `${analysis.angle}°`
                   : '—'}
               </strong>
@@ -317,19 +350,19 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
           <div className='score-row'>
             <div>
               <span className='metric-label'>НАБЛЮДЕНИЕ</span>
-              <strong>{!started ? 'Ожидание' : analysis.observation.status === 'ready' ? 'Нужные точки видны' : 'Недостаточно данных'}</strong>
+              <strong>{!started ? 'Ожидание' : !accepting ? 'Наблюдение приостановлено' : analysis.observation.status === 'ready' ? 'Нужные точки видны' : 'Недостаточно данных'}</strong>
               <small>Неполных: {analysis.result.incomplete} · Не оценено: {analysis.result.unassessed} · С замечаниями: {analysis.result.withErrors}</small>
             </div>
           </div>
           <div className='feedback'>
-            <span className='metric-label'>СЕЙЧАС · {started ? analysis.state : 'Ожидание'}</span>
+            <span className='metric-label'>СЕЙЧАС · {started ? phaseLabels[phase] : 'Ожидание'}</span>
             <div
               role='status' aria-live='polite' aria-atomic='true'
               className={`feedback-message ${cue?.kind === 'technique' || cue?.kind === 'observation' ? 'warning' : ''}`}
             >
               <span aria-hidden='true'>{cue?.kind === 'technique' || cue?.kind === 'observation' ? '!' : '·'}</span>
               <p>
-                {started ? cue?.message ?? 'Проверяем наблюдение…' : 'После запуска здесь появится текущая подсказка.'}
+                {started ? !accepting ? 'Движения не учитываются. Технические подсказки приостановлены.' : cue?.message ?? 'Проверяем наблюдение…' : 'После запуска здесь появится текущая подсказка.'}
                 {cue?.target && <span className='target-note'>Метка «! {cue.target.label}» на видео относится к этому замечанию.</span>}
               </p>
             </div>

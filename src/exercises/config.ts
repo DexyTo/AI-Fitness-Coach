@@ -1,5 +1,7 @@
 import type { ExerciseType } from './types';
 
+export const RULES_VERSION = 'provisional-side-v1';
+
 // Engineering parameters, in source milliseconds / degrees. These are not form rules.
 export const tracking = {
   maxGapMs: 700,

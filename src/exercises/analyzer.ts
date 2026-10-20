@@ -125,7 +125,7 @@ export class MovementAnalyzer implements ExerciseAnalyzer {
     this.observation = { status: 'unavailable', side: null, reasons: [{ code: 'movement_pending' }] };
     return this.snapshot();
   }
-  interrupt(timestamp: number, reason: 'tracking_gap' | 'timeline_reset'): ExerciseAnalysisResult {
+  interrupt(timestamp: number, reason: 'tracking_gap' | 'timeline_reset' | 'session_paused'): ExerciseAnalysisResult {
     if (this.pending) {
       this.invalidatePending({ code: reason });
       this.closeAttempt(reason, Math.max(timestamp, this.lastTimestamp ?? timestamp));

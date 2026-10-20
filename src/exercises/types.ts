@@ -12,7 +12,7 @@ export interface PosePoint {
 }
 export type PoseLandmarks = PosePoint[];
 export type UnavailableSourceReason = 'source_unavailable' | 'detector_error';
-export type ObservationReasonCode = 'no_pose' | 'missing_points' | 'invalid_geometry' | 'tracking_gap' | 'timeline_reset' | 'movement_pending' | 'unsuitable_view' | 'view_unknown' | UnavailableSourceReason;
+export type ObservationReasonCode = 'no_pose' | 'missing_points' | 'invalid_geometry' | 'tracking_gap' | 'timeline_reset' | 'session_paused' | 'movement_pending' | 'unsuitable_view' | 'view_unknown' | UnavailableSourceReason;
 export interface ObservationReason {
   code: ObservationReasonCode;
   criterion?: FeedbackCode;
@@ -37,7 +37,7 @@ export interface MovementAttempt {
   startedAt: number;
   endedAt: number;
   outcome: AttemptOutcome;
-  endReason: 'returned_to_top' | 'reversed_before_top' | 'tracking_gap' | 'timeline_reset' | 'session_finished';
+  endReason: 'returned_to_top' | 'reversed_before_top' | 'tracking_gap' | 'timeline_reset' | 'session_paused' | 'session_finished';
   motionComplete: boolean;
   minAngle: number;
   criteria: CriterionResults;
@@ -72,17 +72,10 @@ export interface ExerciseAnalyzer {
   confirmSideView(): void;
   reset(): void;
   analyze(points: PoseLandmarks, timestamp: number, aspect: number, sourceReason?: UnavailableSourceReason): ExerciseAnalysisResult;
-  interrupt(timestamp: number, reason: 'tracking_gap' | 'timeline_reset'): ExerciseAnalysisResult;
+  interrupt(timestamp: number, reason: 'tracking_gap' | 'timeline_reset' | 'session_paused'): ExerciseAnalysisResult;
   // Idempotent. Flushes a pending movement before the session summary is read.
   finish(timestamp: number): ExerciseAnalysisResult;
   snapshot(): ExerciseAnalysisResult;
-}
-export interface TrainingSession {
-  exercise: ExerciseType;
-  mode: InputMode;
-  duration: number;
-  result: ExerciseResult;
-  mainError: FeedbackCode | null;
 }
 export const labels: Record<ExerciseType, string> = { squat: 'Приседания', pushup: 'Отжимания' };
 export const criterionLabels: Record<FeedbackCode, string> = {
@@ -97,6 +90,7 @@ export const outcomeLabels: Record<AttemptOutcome, string> = {
 export const endReasonLabels: Record<MovementAttempt['endReason'], string> = {
   returned_to_top: 'Возврат в верхнюю точку', reversed_before_top: 'Новое опускание до выпрямления',
   tracking_gap: 'Прервано отслеживание', timeline_reset: 'Разрыв времени видео', session_finished: 'Завершение тренировки',
+  session_paused: 'Пауза пользователя: попытка прервана',
 };
 export const feedbackText: Record<FeedbackCode, string> = {
   depth: 'Присядьте немного ниже.',
@@ -122,6 +116,7 @@ export function reasonText(reason: ObservationReason): string {
     case 'invalid_geometry': return 'Геометрия точек не позволяет вычислить критерий.';
     case 'tracking_gap': return 'Длительный разрыв отслеживания — движение разделено.';
     case 'timeline_reset': return 'Время видео изменилось — требуется новая верхняя точка.';
+    case 'session_paused': return 'Попытка прервана паузой. Перед продолжением нужна новая исходная позиция.';
     case 'movement_pending': return 'Недостаточно наблюдений завершённого движения.';
     case 'unsuitable_view': return 'Повернитесь боком к камере: плечи и таз должны перекрываться в проекции.';
     case 'view_unknown': return 'Ракурс не удалось определить. Сверьтесь с примером съёмки сбоку.';

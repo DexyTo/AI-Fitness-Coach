@@ -4,7 +4,6 @@ import type {
   ExerciseType,
   InputMode,
   PoseLandmarks,
-  TrainingSession,
   UnavailableSourceReason,
 } from '../exercises/types';
 import { createAnalyzer } from '../exercises/analyzer';
@@ -12,17 +11,21 @@ import { tracking } from '../exercises/config';
 import { CoachingController, type CoachingCue } from '../exercises/coaching';
 import { demoPose } from '../pose/demo';
 import { clearPose, drawPose } from '../pose/drawing';
-import { closeDetector, getDetector } from '../pose/poseDetector';
+import { closeDetector, getDetectorWithMetadata } from '../pose/poseDetector';
 import { VideoTimeline } from '../pose/videoTimeline';
+import { TrainingController, phaseLabels, type SessionPhase, type TrainingGoal, type WorkoutRecord } from '../training/session';
+import { HistoryStore } from '../training/history';
 
 
 interface Options {
   exercise: ExerciseType;
   mode: InputMode;
   videoUrl?: string;
+  goal: TrainingGoal;
+  conditions: string;
 }
 
-export function useTraining({ exercise, mode, videoUrl }: Options) {
+export function useTraining({ exercise, mode, videoUrl, goal, conditions }: Options) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analyzerRef = useRef(createAnalyzer(exercise));
@@ -35,7 +38,12 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
   const [started, setStarted] = useState(false);
   const [starting, setStarting] = useState(false);
   const [seconds, setSeconds] = useState(0);
-  const [session, setSession] = useState<TrainingSession | null>(null);
+  const [session, setSession] = useState<WorkoutRecord | null>(null);
+  const controllerRef = useRef<TrainingController | null>(null);
+  const [phase, setPhase] = useState<SessionPhase>('preparing');
+  const [setNumber, setSetNumber] = useState(1);
+  const [restSeconds, setRestSeconds] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const startAt = useRef(0),
     clockRef = useRef(0),
     rafRef = useRef(0),
@@ -76,24 +84,54 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
     [stop],
   );
   const finish = () => {
-    const duration = Math.max(
-      1,
-      Math.round((mode === 'video' ? timelineRef.current.time : performance.now() - startAt.current) / 1000),
-    );
-    const finalAnalysis = analyzerRef.current.finish(mode === 'video' ? analysisTime.current : performance.now());
-    setAnalysis(finalAnalysis);
-    const result = finalAnalysis.result;
-    const mainError = (Object.entries(result.errors).sort(
-      (a, b) => b[1] - a[1],
-    )[0]?.[0] ?? null) as TrainingSession['mainError'];
-    setSession({
-      exercise,
-      mode,
-      duration,
-      result,
-      mainError,
-    });
+    const controller = controllerRef.current;
+    if (!controller) return;
+    const record = controller.finish(mode === 'video' ? analysisTime.current : performance.now(), performance.now());
+    setSession(record);
+    setSaveError(new HistoryStore().save(record));
+    setPhase('completed');
     stop();
+  };
+  const syncController = () => {
+    const controller = controllerRef.current;
+    if (!controller) return;
+    const remaining = controller.remainingRest(performance.now());
+    setPhase(controller.phase);
+    setSetNumber(Math.min(controller.currentSet, controller.goal.sets));
+    setRestSeconds(remaining);
+    if (!controller.acceptsFrames) setStatus(`${phaseLabels[controller.phase]}. Движения не учитываются; технические подсказки выключены.`);
+  };
+  const suspendFeedback = () => {
+    coachingRef.current.reset();
+    setCue(null);
+    if (canvasRef.current) clearPose(canvasRef.current);
+    setAnalysis(analyzerRef.current.snapshot());
+    syncController();
+  };
+  const pause = () => {
+    controllerRef.current?.pause(mode === 'video' ? analysisTime.current : performance.now());
+    if (mode === 'video') videoRef.current?.pause();
+    suspendFeedback();
+  };
+  const resume = async () => {
+    const controller = controllerRef.current;
+    if (!controller || !['paused', 'next'].includes(controller.phase)) return;
+    if (mode === 'video' && videoRef.current?.ended) { finish(); return; }
+    controller.resume(performance.now());
+    analyzerRef.current = controller.analyzer;
+    lastVideoFrameAt.current = performance.now();
+    lastVideoTime.current = -1;
+    suspendFeedback();
+    if (mode === 'video') {
+      try { await videoRef.current?.play(); }
+      catch { pause(); setStatus('Не удалось продолжить видео. Повторите продолжение.'); }
+    }
+  };
+  const endSet = () => {
+    controllerRef.current?.endSet(mode === 'video' ? analysisTime.current : performance.now(), performance.now());
+    if (mode === 'video') videoRef.current?.pause();
+    suspendFeedback();
+    if (controllerRef.current?.phase === 'completed') finish();
   };
   const start = async () => {
     stop();
@@ -106,6 +144,9 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
     setAnalysis(analyzerRef.current.snapshot());
     setSeconds(0);
     setSession(null);
+    setSaveError(null);
+    controllerRef.current = null;
+    coachingRef.current.reset();
     const video = videoRef.current;
     try {
       if (mode === 'camera') {
@@ -135,12 +176,20 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
         video.src = videoUrl;
         video.loop = false;
       }
-      const detector = mode === 'demo' ? null : await getDetector();
+      const detection = mode === 'demo' ? null : await getDetectorWithMetadata();
+      const detector = detection?.detector;
       if (cancelled()) return;
       // A short local recording must not play through while the model is loading.
       if (mode === 'video' && video) await video.play();
       if (cancelled()) return;
       startAt.current = performance.now();
+      controllerRef.current = new TrainingController(exercise, mode, goal, conditions, startAt.current, undefined, undefined, {
+        width: mode === 'demo' ? 1600 : video?.videoWidth ?? 0,
+        height: mode === 'demo' ? 1000 : video?.videoHeight ?? 0,
+        delegate: detection?.delegate ?? 'synthetic', settings: detection ? { ...detection.settings } : {},
+      });
+      analyzerRef.current = controllerRef.current.analyzer;
+      syncController();
       lastFrame.current = 0;
       lastVideoTime.current = -1;
       lastVideoFrameAt.current = startAt.current;
@@ -156,8 +205,11 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
           : 'Наведите камеру так, чтобы тело было видно целиком',
       );
       clockRef.current = window.setInterval(
-        () =>
-          setSeconds(Math.floor((mode === 'video' ? timelineRef.current.time : performance.now() - startAt.current) / 1000)),
+        () => {
+          setSeconds(Math.floor((performance.now() - startAt.current) / 1000));
+          controllerRef.current?.advance(performance.now());
+          syncController();
+        },
         1000,
       );
       let displayedCue: CoachingCue | null = null;
@@ -165,7 +217,14 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
         if (cancelled()) return;
         rafRef.current = requestAnimationFrame(tick);
         const now = performance.now();
+        const controller = controllerRef.current!;
+        controller.advance(now);
         const sourceEnded = mode === 'video' && video?.ended;
+        if (!controller.acceptsFrames) {
+          if (sourceEnded) finish();
+          else syncController();
+          return;
+        }
         if (now - lastFrame.current < 85 && !sourceEnded) return;
         lastFrame.current = now;
         const canvas = canvasRef.current;
@@ -187,7 +246,7 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
           if (mode === 'video') {
             const sample = timelineRef.current.sample(video.currentTime);
             timestamp = sample.time;
-            if (sample.reset) analyzerRef.current.interrupt(timestamp - 0.5, 'timeline_reset');
+            if (sample.reset) controller.interrupt(timestamp - 0.5);
           }
           lastVideoTime.current = video.currentTime;
           lastVideoFrameAt.current = now;
@@ -218,7 +277,16 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
             : (video?.videoWidth ?? width) / (video?.videoHeight ?? height);
         const before = analyzerRef.current.snapshot();
         analysisTime.current = timestamp;
-        const current = analyzerRef.current.analyze(points, timestamp, aspect, sourceReason);
+        const current = controller.sample(points, timestamp, aspect, now, sourceReason);
+        syncController();
+        if (sourceEnded) { finish(); return; }
+        if (!controller.acceptsFrames) {
+          if (mode === 'video') video?.pause();
+          suspendFeedback();
+          displayedCue = null;
+          if (controller.phase === 'completed') finish();
+          return;
+        }
         const currentCue = coachingRef.current.update(current, points, aspect, now);
         if (points.length) drawPose(canvas, points, width, height, mode === 'demo' ? 1600 : video!.videoWidth, mode === 'demo' ? 1000 : video!.videoHeight, currentCue.target);
         else clearPose(canvas);
@@ -233,7 +301,6 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
           lastUi.current = now;
         }
         setStatus(`${mode === 'demo' ? 'Симуляция. ' : ''}${current.preparation.message}`);
-        if (sourceEnded) finish();
       };
       rafRef.current = requestAnimationFrame(tick);
     } catch (error) {
@@ -257,11 +324,24 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
     starting,
     seconds,
     session,
+    phase,
+    setNumber,
+    restSeconds,
+    saveError,
+    pause,
+    resume,
+    endSet,
+    retrySave: () => {
+      if (!session) return;
+      setSaveError(new HistoryStore().save(session));
+    },
     start,
     finish,
     stop,
     restart: () => {
       stop();
+      controllerRef.current = null;
+      setPhase('preparing');
       analyzerRef.current = createAnalyzer(exercise);
       setAnalysis(analyzerRef.current.snapshot());
       setSession(null);
@@ -273,7 +353,7 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
       if (mode !== 'video' || !started) return;
       timelineRef.current.seek();
       lastVideoTime.current = -1;
-      const interrupted = analyzerRef.current.interrupt(analysisTime.current, 'timeline_reset');
+      const interrupted = controllerRef.current?.interrupt(analysisTime.current) ?? analyzerRef.current.snapshot();
       setAnalysis(interrupted);
       coachingRef.current.reset();
       setCue(coachingRef.current.update(interrupted, [], 1, performance.now()));
