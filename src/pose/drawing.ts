@@ -1,6 +1,7 @@
 import type { PoseLandmarks } from '../exercises/types';
 import { edges, visible } from './landmarks';
 import { containViewport } from './viewport';
+import type { CoachingCue } from '../exercises/coaching';
 
 
 export function drawPose(
@@ -10,6 +11,7 @@ export function drawPose(
   height: number,
   sourceWidth = width,
   sourceHeight = height,
+  target?: CoachingCue['target'],
 ) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   if (
@@ -49,6 +51,28 @@ export function drawPose(
     ctx.lineWidth = 2;
     ctx.strokeStyle = '#445f1e';
     ctx.stroke();
+  }
+  if (target && target.points.every(i => visible(points[i]))) {
+    ctx.strokeStyle = '#ffdda0';
+    ctx.lineWidth = 7;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    target.points.forEach((i, index) => {
+      if (index === 0) ctx.moveTo(x(points[i].x), y(points[i].y));
+      else ctx.lineTo(x(points[i].x), y(points[i].y));
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const anchor = points[target.points[0]];
+    ctx.font = 'bold 14px sans-serif';
+    const text = `! ${target.label}`;
+    const labelWidth = ctx.measureText(text).width + 16;
+    const labelX = Math.max(viewport.x, Math.min(x(anchor.x) + 12, viewport.x + viewport.width - labelWidth));
+    const labelY = Math.max(viewport.y + 24, y(anchor.y) - 14);
+    ctx.fillStyle = '#151c18';
+    ctx.fillRect(labelX, labelY - 20, labelWidth, 27);
+    ctx.fillStyle = '#ffdda0';
+    ctx.fillText(text, labelX + 8, labelY);
   }
 }
 

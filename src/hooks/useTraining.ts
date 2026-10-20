@@ -9,6 +9,7 @@ import type {
 } from '../exercises/types';
 import { createAnalyzer } from '../exercises/analyzer';
 import { tracking } from '../exercises/config';
+import { CoachingController, type CoachingCue } from '../exercises/coaching';
 import { demoPose } from '../pose/demo';
 import { clearPose, drawPose } from '../pose/drawing';
 import { closeDetector, getDetector } from '../pose/poseDetector';
@@ -25,6 +26,8 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analyzerRef = useRef(createAnalyzer(exercise));
+  const coachingRef = useRef(new CoachingController(exercise));
+  const [cue, setCue] = useState<CoachingCue | null>(null);
   const [analysis, setAnalysis] = useState<ExerciseAnalysisResult>(() =>
     analyzerRef.current.snapshot(),
   );
@@ -62,6 +65,8 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
     if (canvasRef.current) clearPose(canvasRef.current);
     setStarted(false);
     setStarting(false);
+    setCue(null);
+    coachingRef.current.reset();
   }, []);
   useEffect(
     () => () => {
@@ -155,6 +160,7 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
           setSeconds(Math.floor((mode === 'video' ? timelineRef.current.time : performance.now() - startAt.current) / 1000)),
         1000,
       );
+      let displayedCue: CoachingCue | null = null;
       const tick = () => {
         if (cancelled()) return;
         rafRef.current = requestAnimationFrame(tick);
@@ -210,16 +216,20 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
           mode === 'demo'
             ? 1.6
             : (video?.videoWidth ?? width) / (video?.videoHeight ?? height);
-        if (points.length) drawPose(canvas, points, width, height, mode === 'demo' ? 1600 : video!.videoWidth, mode === 'demo' ? 1000 : video!.videoHeight);
-        else clearPose(canvas);
         const before = analyzerRef.current.snapshot();
         analysisTime.current = timestamp;
         const current = analyzerRef.current.analyze(points, timestamp, aspect, sourceReason);
-        if (now - lastUi.current > 130 || current.observation.status !== 'ready' ||
+        const currentCue = coachingRef.current.update(current, points, aspect, now);
+        if (points.length) drawPose(canvas, points, width, height, mode === 'demo' ? 1600 : video!.videoWidth, mode === 'demo' ? 1000 : video!.videoHeight, currentCue.target);
+        else clearPose(canvas);
+        if (now - lastUi.current > 130 || currentCue.key !== displayedCue?.key || currentCue.message !== displayedCue?.message || current.observation.status !== 'ready' ||
+            current.state !== before.state ||
             current.observation.status !== before.observation.status ||
             current.preparation.stage !== before.preparation.stage ||
             current.result.attempts.length !== before.result.attempts.length) {
           setAnalysis(current);
+          setCue(currentCue);
+          displayedCue = currentCue;
           lastUi.current = now;
         }
         setStatus(`${mode === 'demo' ? 'Симуляция. ' : ''}${current.preparation.message}`);
@@ -241,6 +251,7 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
     videoRef,
     canvasRef,
     analysis,
+    cue,
     status,
     started,
     starting,
@@ -264,6 +275,8 @@ export function useTraining({ exercise, mode, videoUrl }: Options) {
       lastVideoTime.current = -1;
       const interrupted = analyzerRef.current.interrupt(analysisTime.current, 'timeline_reset');
       setAnalysis(interrupted);
+      coachingRef.current.reset();
+      setCue(coachingRef.current.update(interrupted, [], 1, performance.now()));
       setStatus('Перемотка: текущая попытка прервана. Снова удерживайте исходную позицию.');
       if (canvasRef.current) clearPose(canvasRef.current);
     },

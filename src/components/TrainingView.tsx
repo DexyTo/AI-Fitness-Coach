@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { ExerciseType, InputMode, FeedbackCode } from '../exercises/types';
-import { criterionLabels, criterionStatusLabels, endReasonLabels, feedbackMessage, labels, outcomeLabels, reasonText } from '../exercises/types';
+import { criterionLabels, labels } from '../exercises/types';
+import { criterionTotals, nextTask } from '../exercises/coaching';
+import { variant } from '../exercises/config';
+import { AttemptReport } from './AttemptReport';
 import { useTraining } from '../hooks/useTraining';
 import { useVoiceFeedback } from '../hooks/useVoiceFeedback';
 
@@ -29,6 +32,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
     videoRef,
     canvasRef,
     analysis,
+    cue,
     status,
     started,
     starting,
@@ -44,14 +48,14 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
     enabled: voiceEnabled,
     setEnabled: setVoiceEnabled,
     supported: voiceSupported,
-  } = useVoiceFeedback(started && analysis.state !== 'Оценка приостановлена' &&
-    (analysis.preparation.stage === 'active' || analysis.preparation.stage === 'ready'), analysis.feedback[0]);
+  } = useVoiceFeedback(started && !session && analysis.state !== 'Оценка приостановлена', cue);
+  const previousAttempt = analysis.result.attempts.at(-1);
   const onFile = (file?: File) => {
     if (!file) return;
     setVideoUrl(URL.createObjectURL(file));
   };
   if (session) {
-    const { result, mainError } = session;
+    const { result } = session;
     return (
       <main className='results page-enter'>
         <div className='results-icon'>✓</div>
@@ -84,35 +88,23 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
         <div className='recommend'>
           <span className='recommend-symbol'>✦</span>
           <div>
-            <b>Результаты наблюдения</b>
-            <p>
-              {mainError ? feedbackMessage(exercise, mainError)
-                : result.unassessed ? 'Часть движений не удалось оценить. Ниже указаны недостающие данные.'
-                : result.reps ? 'В проверенных признаках полных повторов замечаний не обнаружено.'
-                : 'Завершённых движений не зафиксировано. Начните с верхней точки.'}
-            </p>
+            <b>Одна задача на следующий подход</b>
+            <p>{nextTask(result, exercise)}</p>
             <p>Полных повторов без обнаруженных замечаний: {result.withoutFindings}. Замечания учитываются независимо от исхода попытки.</p>
           </div>
         </div>
+        <section className='criterion-summary' aria-label='Результаты по критериям'>
+          <h2>Что удалось проверить</h2>
+          <p>Предварительные критерии · {variant(exercise).id}. Это результаты наблюдений, а не процент техники.</p>
+          {result.attempts.length ? <ul className='criterion-list'>{Object.entries(criterionTotals(result)).map(([code, total]) => <li key={code}>
+            <b>{criterionLabels[code as FeedbackCode]}</b>: выполнен в {total.passed}, отклонение в {total.deviation}, не оценён в {total.unassessed} попытках.
+          </li>)}</ul> : <p>Попыток для проверки пока нет.</p>}
+        </section>
         {result.attempts.length > 0 && (
           <section className='attempt-report' aria-label='Разбор попыток'>
             <h2>Разбор попыток</h2>
             {result.attempts.map(attempt => (
-              <article className='attempt-item' key={attempt.id}>
-                <h3>#{attempt.id} · {outcomeLabels[attempt.outcome]}</h3>
-                <p>{endReasonLabels[attempt.endReason]} · Минимальный наблюдаемый угол: {attempt.minAngle}°</p>
-                {attempt.outcome === 'incomplete' && <p>Не засчитано: {attempt.remarks.includes('depth') ? 'нижняя точка не достигнута. ' : ''}{attempt.remarks.includes('extension') ? 'возврат к выпрямлению не завершён.' : ''}</p>}
-                {attempt.outcome === 'insufficient_data' && <p>Не засчитано: обязательные проверки имеют пропуски данных.{attempt.motionComplete ? ' По доступным точкам цикл движения виден, но полностью оценить его нельзя.' : ''}</p>}
-                {attempt.reasons.length > 0 && <ul>{[...new Set(attempt.reasons.map(reasonText))].map(text => <li key={text}>{text}</li>)}</ul>}
-                <ul className='criterion-list'>
-                  {Object.entries(attempt.criteria).map(([code, check]) => (
-                    <li key={code}>
-                      <b>{criterionLabels[code as FeedbackCode]}</b>: {criterionStatusLabels[check.status]}
-                      {check.reasons.length > 0 && <span> · {[...new Set(check.reasons.map(reasonText))].join(' ')}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </article>
+              <AttemptReport key={attempt.id} attempt={attempt} exercise={exercise} />
             ))}
           </section>
         )}
@@ -141,7 +133,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
             <span className='accent'>.</span>
           </h1>
           <p className='muted'>
-            Следите за движением. Остальное берём на себя.
+            Наблюдение движения и подсказки по доступным точкам.
           </p>
         </div>
         <div className='clock'>
@@ -253,7 +245,6 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
             {started && <>
               <p><b>Ракурс:</b> {({ side: 'похож на боковой (эвристика)', unsuitable: 'повернитесь боком', unknown: 'не удалось определить', not_required: 'не проверяется' }[analysis.preparation.view])}</p>
               {analysis.preparation.view === 'unknown' && !analysis.preparation.viewConfirmed && analysis.observation.status === 'ready' && <button className='button' onClick={confirmSideView}>Подтверждаю съёмку сбоку по примеру</button>}
-              <p role='status'>{analysis.preparation.message}</p>
             </>}
           </section>}
           <div className='dashboard-title'>
@@ -293,6 +284,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
                 : 'Звук недоступен'}
             </button>
           </div>
+          <p className='variant-note'>Вариант: {exercise === 'squat' ? 'без веса, сбоку' : 'отжимания сбоку'} · {variant(exercise).id}. Правила предварительные.</p>
           <div className='rep-block'>
             <span className='metric-label'>ПОВТОРЕНИЯ</span>
             <div className='rep-value'>
@@ -329,27 +321,23 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
               <small>Неполных: {analysis.result.incomplete} · Не оценено: {analysis.result.unassessed} · С замечаниями: {analysis.result.withErrors}</small>
             </div>
           </div>
-          {started && <ul className='criterion-list live-criteria'>
-            {Object.entries(analysis.criteria).map(([code, check]) => <li key={code}>
-              {criterionLabels[code as FeedbackCode]}: {criterionStatusLabels[check.status]}
-            </li>)}
-          </ul>}
           <div className='feedback'>
-            <span className='metric-label'>ПОДСКАЗКИ В РЕАЛЬНОМ ВРЕМЕНИ</span>
+            <span className='metric-label'>СЕЙЧАС · {started ? analysis.state : 'Ожидание'}</span>
             <div
-              className={`feedback-message ${analysis.feedback.length || (started && analysis.state === 'Оценка приостановлена') ? 'warning' : ''}`}
+              role='status' aria-live='polite' aria-atomic='true'
+              className={`feedback-message ${cue?.kind === 'technique' || cue?.kind === 'observation' ? 'warning' : ''}`}
             >
-              <span>{analysis.feedback.length || analysis.state === 'Оценка приостановлена' ? '!' : '·'}</span>
+              <span aria-hidden='true'>{cue?.kind === 'technique' || cue?.kind === 'observation' ? '!' : '·'}</span>
               <p>
-                {started && (analysis.state === 'Оценка приостановлена' || analysis.preparation.stage === 'preparing' || analysis.preparation.stage === 'recovering')
-                  ? analysis.preparation.message
-                  : analysis.feedback[0]?.message ??
-                  (started
-                    ? 'Наблюдаем движение. Итог проверок появится в разборе попыток.'
-                    : 'После запуска здесь появятся подсказки.')}
+                {started ? cue?.message ?? 'Проверяем наблюдение…' : 'После запуска здесь появится текущая подсказка.'}
+                {cue?.target && <span className='target-note'>Метка «! {cue.target.label}» на видео относится к этому замечанию.</span>}
               </p>
             </div>
           </div>
+          {previousAttempt && <section className='previous-attempt' aria-label='Предыдущая попытка'>
+            <span className='metric-label'>ПРЕДЫДУЩАЯ ПОПЫТКА · НЕ ТЕКУЩИЙ СОВЕТ</span>
+            <AttemptReport attempt={previousAttempt} exercise={exercise} compact />
+          </section>}
           <button
             className='button button-end'
             disabled={!started}

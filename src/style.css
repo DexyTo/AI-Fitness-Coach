@@ -790,6 +790,7 @@ footer {
   margin-top: 30px;
 }
 .feedback-message {
+  gap: 10px;
   border: 1px solid #45613a;
   background: #293c28;
   border-radius: 8px;
@@ -799,6 +800,25 @@ footer {
   gap: 12px;
   margin-top: 15px;
   color: #d1e9bf;
+}
+.variant-note, .target-note { font-size: 12px; line-height: 1.6; color: #b1c6a5; }
+.target-note { display: block; margin-top: 8px; color: inherit; }
+.previous-attempt { margin-top: 24px; padding-top: 20px; border-top: 1px solid #44533f; }
+.previous-attempt .attempt-item { font-size: 12px; }
+.previous-attempt h3 { font-size: 14px; }
+.attempt-item summary { cursor: pointer; padding: 10px 0; text-decoration: underline; }
+.attempt-item summary:focus-visible { outline: 2px solid #d0f38c; outline-offset: 3px; }
+.criterion-summary { text-align: left; padding: 18px; border: 1px solid #44533f; border-radius: 8px; }
+.criterion-summary p { font-size: 13px; line-height: 1.6; }
+.dashboard, .camera-card, .result-tile { min-width: 0; }
+.dashboard { overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .stage { min-height: 330px; }
+  .workout-heading { flex-wrap: wrap; gap: 16px; }
+  .dashboard-title { flex-wrap: wrap; gap: 12px; }
+  .camera-bottom { height: auto; min-height: 52px; padding: 12px; }
+  .result-actions { margin: 24px 0; }
+  .result-actions .button { white-space: normal; }
 }
 .feedback-message.warning {
   border-color: #957b49;
