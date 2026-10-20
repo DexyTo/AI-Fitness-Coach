@@ -52,7 +52,7 @@ describe('accounts and protected workout history',() => {
     await next.inject({method:'POST',url:'/api/auth/logout',headers:{'x-playfit-request':'1',cookie:fresh},payload:{}});
     expect((await next.inject({url:'/api/auth/me',headers:{cookie:fresh}})).json().user).toBeNull();
     expect((await next.inject({url:'/api/auth/me',headers:{cookie:bob.cookie}})).json().user.id).toBe(bob.user.id);
-  });
+  },15000); // Several real scrypt operations can contend with other API suites.
   it('validates credentials, rejects case-insensitive duplicate login and protects origin on auth and all writes',async () => {
     const { app,request,register }=setup(); await register();
     expect((await request('POST','/api/auth/register',{login:'ALICE',password:'Another-pass'})).statusCode).toBe(409);

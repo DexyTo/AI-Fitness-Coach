@@ -4,7 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isWorkoutRecord } from '../shared/historyValidation.js';
 import type { WorkoutRecord, TrainingGoal } from '../shared/workout.js';
 import { importSchema, obj, snapshotSchema, workoutSchema } from './workoutSchema.js';
-import { catalog, programRecordSchema, programSnapshotSchema } from './programs.js';
+import { availablePrograms, registerPrograms, programRecordSchema, programSnapshotSchema } from './programs.js';
 import { isProgram, same, validPlan, validProgramRecord, type HistoryRecord, type ProgramSnapshot } from '../shared/program.js';
 
 export class ApiError extends Error {
@@ -38,11 +38,6 @@ function validateRecord(value: unknown): asserts value is WorkoutRecord {
     value.sets.reduce((n,s) => n + s.durationMs,0) > value.duration * 1000 + 1) fail(400, 'INVALID_RESULT', 'Результат содержит несогласованные показатели.');
 }
 export function registerAccounts(app: FastifyInstance, db: Database.Database) {
-  app.get('/api/programs', { schema:{ querystring:obj({}) } }, async () => ({ programs:catalog(db) }));
-  app.get<{Params:{id:string}}>('/api/programs/:id', {schema:{params:obj({id:idSchema}),querystring:obj({})}}, async req => {
-    const program = catalog(db).find(p => p.id === req.params.id) ?? fail(404,'NOT_FOUND','Программа не найдена.');
-    return {program};
-  });
   const token = (req: FastifyRequest) => {
     const candidate = req.headers.cookie?.split(';').map(v => v.trim()).find(v => v.startsWith('playfit_session='))?.slice(16);
     return candidate && /^[a-f0-9]{64}$/.test(candidate) ? candidate : null;
@@ -66,6 +61,7 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
     })();
     reply.header('set-cookie', `playfit_session=${raw}; Path=/api; HttpOnly; SameSite=Strict; Max-Age=2592000`);
   };
+  registerPrograms(app,db,requireUser,req => req.headers['x-playfit-user'] !== undefined ? requireUser(req) : current(req),fail);
   const attempts = new Map<string, { count: number; until: number }>();
   let activeKdf = 0;
   async function authLimit(req: FastifyRequest, work: () => Promise<User>) {
@@ -138,7 +134,7 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
     const row = db.prepare('SELECT * FROM workout_runs WHERE user_id=? AND request_id=?').get(user.id,req.body.requestId) as { id: string; snapshot_json: string; created_at: string } | undefined;
     if (row && row.snapshot_json !== json) fail(409,'RUN_CONFLICT','Этот запрос уже связан с другой целью.');
     if (!row && 'kind' in snapshot) {
-      const plan = snapshot.program, template = catalog(db).find(p => p.id === plan.id);
+      const plan = snapshot.program, template = availablePrograms(db,user.id).find(p => p.id === plan.id);
       if (!validPlan(plan) || !template || !same({...plan,steps:plan.steps.map(s => ({id:s.id,exercise:s.exercise}))},{...template,steps:template.steps.map(s => ({id:s.id,exercise:s.exercise}))})) fail(409,'PROGRAM_CHANGED','Шаблон изменился или недоступен. Открой программу заново.');
     }
     const id = row?.id ?? randomUUID(), createdAt = row?.created_at ?? new Date().toISOString();

@@ -1,0 +1,106 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, copyFileSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { buildApp } from './app.js';
+import { openDatabase, migrate } from './database.js';
+import { projectRoot } from './config.js';
+import type { ProgramPlan, ProgramRecord, ProgramSnapshot } from '../shared/program.js';
+import { draftOf } from '../shared/programDraft.js';
+
+const cleanups:(()=>unknown|Promise<unknown>)[]=[];
+afterEach(async()=>{for(const cleanup of cleanups.splice(0).reverse())await cleanup();});
+function setup() {
+  const directory=mkdtempSync(join(tmpdir(),'playfit-builder-'));
+  cleanups.push(()=>rmSync(directory,{recursive:true,force:true}));
+  const path=join(directory,'test.sqlite'),db=openDatabase(path);migrate(db);
+  const app=buildApp(db);cleanups.push(()=>app.close());
+  const req=(method:'GET'|'POST'|'PUT'|'DELETE',url:string,payload?:unknown,cookie?:string,userId?:string)=>app.inject({method,url,payload:payload as object,headers:{'x-playfit-request':'1',...(cookie?{cookie}:{}),...(userId?{'x-playfit-user':userId}:{})}});
+  const register=async(login:string)=>{const r=await req('POST','/api/auth/register',{login,password:'Local-Pass-123'});expect(r.statusCode).toBe(201);return {cookie:String(r.headers['set-cookie']).split(';')[0],id:r.json().user.id};};
+  const template=async()=>((await req('GET','/api/programs/squat-pushup')).json().program as ProgramPlan);
+  return {directory,path,db,app,req,register,template};
+}
+describe('personal program builder',()=>{
+  it('upgrades an existing stage 3 database with immutable ordered snapshots without rewriting templates',()=>{
+    const {directory}=setup(),oldMigrations=join(directory,'old');mkdirSync(oldMigrations);
+    for(const name of ['001_foundation.sql','002_accounts.sql','003_programs.sql'])copyFileSync(join(projectRoot,'server/migrations',name),join(oldMigrations,name));
+    const path=join(directory,'old.sqlite'),old=openDatabase(path);
+    migrate(old,oldMigrations);old.prepare("UPDATE programs SET version=3,title='Свой текст' WHERE id='squat-pushup'").run();
+    expect(migrate(old)).toEqual(['004_builder.sql']);expect(migrate(old)).toEqual([]);
+    const snapshot=JSON.parse((old.prepare("SELECT snapshot_json FROM program_versions WHERE program_id='squat-pushup'").get() as {snapshot_json:string}).snapshot_json) as ProgramPlan;
+    expect(snapshot).toMatchObject({version:3,title:'Свой текст',origin:'catalog',ownerId:null});expect(snapshot.steps.map(s=>s.exercise)).toEqual(['squat','pushup']);
+    expect(()=>old.prepare("UPDATE program_versions SET version=4 WHERE program_id='squat-pushup'").run()).toThrow(/Immutable/);
+    old.close();
+  });
+  it('creates, reorders, versions and copies plans, isolates every private operation, detects stale edits',async()=>{
+    const {req,db,register,template}=setup(),alice=await register('alice'),bob=await register('bob');
+    const original=await template(),draft=draftOf(original);draft.title='Мой план';draft.steps.reverse();
+    expect((await req('POST','/api/programs',draft)).statusCode).toBe(401);
+    const created=await req('POST','/api/programs',draft,alice.cookie,alice.id);expect(created.statusCode,created.body).toBe(201);
+    const plan=created.json().program as ProgramPlan,url=`/api/programs/${plan.id}`;
+    expect(plan).toMatchObject({...draft,origin:'personal',ownerId:alice.id,version:1});
+    expect((await req('GET',url,undefined,alice.cookie)).json().program).toEqual(plan);
+    for(const cookie of [undefined,bob.cookie])expect((await req('GET',url,undefined,cookie)).statusCode).toBe(404);
+    expect((await req('GET','/api/programs',undefined,bob.cookie)).json().programs).toHaveLength(7);
+    expect((await req('GET','/api/me/programs',undefined,alice.cookie)).json().programs).toEqual([plan]);
+    for(const [method,path,body] of [['PUT',url,{...draft,version:1}],['DELETE',url,undefined],['POST',`${url}/copy`,{version:1}],['PUT',`${url}/favorite`,undefined]] as const)expect((await req(method,path,body,bob.cookie)).statusCode).toBe(404);
+    expect((await req('GET','/api/me/programs',undefined,bob.cookie,alice.id)).statusCode).toBe(409);
+    expect((await req('PUT','/api/programs/squat-pushup',{...draft,version:1},alice.cookie)).statusCode).toBe(404);
+    expect((await req('DELETE','/api/programs/squat-pushup',undefined,alice.cookie)).statusCode).toBe(404);
+    const edited=(await req('PUT',url,{...draft,title:'Новая редакция',version:1},alice.cookie)).json().program as ProgramPlan;
+    expect(edited.version).toBe(2);
+    expect((await req('PUT',url,{...draft,version:1},alice.cookie)).statusCode).toBe(409);
+    expect((await req('POST',`${url}/copy`,{version:1},alice.cookie)).statusCode).toBe(409);
+    const copy=(await req('POST',`${url}/copy`,{version:2},alice.cookie)).json().program as ProgramPlan;
+    expect(copy.id).not.toBe(plan.id);expect(copy.version).toBe(1);expect(draftOf(copy)).toEqual(draftOf(edited));
+    const catalogCopy=(await req('POST','/api/programs/squat-pushup/copy',{version:1},alice.cookie)).json().program as ProgramPlan;
+    expect(draftOf(catalogCopy)).toEqual(draftOf(original));expect(await template()).toEqual(original);
+    const versions=db.prepare('SELECT snapshot_json FROM program_versions WHERE program_id=? ORDER BY version').all(plan.id) as {snapshot_json:string}[];
+    expect(versions.map(r=>JSON.parse(r.snapshot_json))).toEqual([plan,edited]);
+  });
+  it('rejects invalid structure, unknown fields, duplicate steps and parameter boundaries transactionally',async()=>{
+    const {req,register,template,db}=setup(),alice=await register('alice'),draft=draftOf(await template());
+    const badDrafts=[{...draft,title:'   '},{...draft,steps:[]},{...draft,steps:Array(13).fill(draft.steps[0])},{...draft,steps:[draft.steps[0],draft.steps[0]]},{...draft,ownerId:alice.id},{...draft,version:99},{...draft,steps:[{...draft.steps[0],exercise:'jump'}]},...[0,101,1.5,'2',null].map(sets=>({...draft,steps:[{...draft.steps[0],goal:{...draft.steps[0].goal,sets}}]})),...[-1,3601,0.5].map(transitionSeconds=>({...draft,steps:[{...draft.steps[0],transitionSeconds}]}))];
+    for(const body of badDrafts){const r=await req('POST','/api/programs',body,alice.cookie);expect(r.statusCode,r.body).toBe(400);}
+    const valid={...draft,steps:[{...draft.steps[0],goal:{sets:100,reps:1000,restSeconds:3600},transitionSeconds:3600}]};
+    expect((await req('POST','/api/programs',valid,alice.cookie)).statusCode).toBe(201);
+    expect((db.prepare("SELECT count(*) AS n FROM programs WHERE origin='personal'").get() as {n:number}).n).toBe(1);
+    const copyBefore=db.prepare('SELECT count(*) AS n FROM programs').get();
+    db.exec("CREATE TRIGGER reject_steps BEFORE INSERT ON program_steps BEGIN SELECT RAISE(ABORT,'test failure'); END;");
+    expect((await req('POST','/api/programs',draft,alice.cookie)).statusCode).toBe(500);
+    expect(db.prepare('SELECT count(*) AS n FROM programs').get()).toEqual(copyBefore);
+  });
+  it('keeps favorites idempotent and isolated after reopen; archives hide templates but preserve runs/results/versions',async()=>{
+    const {req,db,path,app,register,template}=setup(),alice=await register('alice'),bob=await register('bob');
+    const plan=(await req('POST','/api/programs',draftOf(await template()),alice.cookie)).json().program as ProgramPlan;
+    const url=`/api/programs/${plan.id}`;
+    const snapshot:ProgramSnapshot={kind:'program',program:plan,mode:'demo',conditions:''};
+    const begin=await req('POST','/api/runs',{...snapshot,requestId:'frozen'},alice.cookie),run=begin.json();expect(begin.statusCode).toBe(201);
+    const pending=(await req('POST','/api/runs',{...snapshot,requestId:'pending'},alice.cookie)).json();
+    const record:ProgramRecord={schemaVersion:2,kind:'program',id:run.id,date:run.createdAt,program:plan,mode:'demo',conditions:'',ended:'interrupted',duration:0,steps:[]};
+    for(const id of [plan.id,'squat-pushup'])for(let i=0;i<2;i++)expect((await req('PUT',`/api/programs/${id}/favorite`,undefined,alice.cookie)).statusCode).toBe(200);
+    expect((await req('GET','/api/me/favorites',undefined,alice.cookie)).json().programs).toHaveLength(2);
+    expect((await req('GET','/api/me/favorites',undefined,bob.cookie)).json().programs).toEqual([]);
+    expect((db.prepare('SELECT count(*) AS n FROM program_favorites').get() as {n:number}).n).toBe(2);
+    expect((await req('PUT',url,{...draftOf(plan),title:'Другая версия',version:1},alice.cookie)).statusCode).toBe(200);
+    expect((await req('POST','/api/runs',{...snapshot,requestId:'stale'},alice.cookie)).statusCode).toBe(409);
+    expect((await req('POST',`/api/runs/${run.id}/complete`,{record},alice.cookie)).statusCode).toBe(201);
+    for(let i=0;i<2;i++)expect((await req('DELETE',url,undefined,alice.cookie)).statusCode).toBe(200);
+    expect((await req('GET',url,undefined,alice.cookie)).statusCode).toBe(404);
+    expect((await req('GET','/api/me/programs',undefined,alice.cookie)).json().programs).toEqual([]);
+    expect((await req('POST',`${url}/copy`,{version:2},alice.cookie)).statusCode).toBe(404);
+    expect((await req('PUT',`${url}/favorite`,undefined,alice.cookie)).statusCode).toBe(404);
+    expect((await req('POST','/api/runs',{...snapshot,requestId:'new'},alice.cookie)).statusCode).toBe(409);
+    expect((await req('POST','/api/runs',{...snapshot,requestId:'frozen'},alice.cookie)).json().id).toBe(run.id);
+    expect((await req('POST',`/api/runs/${run.id}/complete`,{record},alice.cookie)).statusCode).toBe(200);
+    const pendingRecord={...record,id:pending.id,date:pending.createdAt};
+    expect((await req('POST',`/api/runs/${pending.id}/complete`,{record:pendingRecord},alice.cookie)).statusCode).toBe(201);
+    await app.close();const reopened=openDatabase(path);expect(migrate(reopened)).toEqual([]);const next=buildApp(reopened);cleanups.push(()=>next.close());
+    const get=(url:string)=>next.inject({url,headers:{cookie:alice.cookie}});
+    expect((await get('/api/me/favorites')).json().programs.map((p:ProgramPlan)=>p.id)).toEqual(['squat-pushup']);
+    expect((await get('/api/history')).json().results.map((r:{record:ProgramRecord})=>r.record)).toEqual(expect.arrayContaining([record,pendingRecord]));
+    expect((reopened.prepare('SELECT count(*) AS n FROM program_versions WHERE program_id=?').get(plan.id) as {n:number}).n).toBe(2);
+    for(let i=0;i<2;i++)expect((await next.inject({method:'DELETE',url:'/api/programs/squat-pushup/favorite',headers:{cookie:alice.cookie,'x-playfit-request':'1'}})).statusCode).toBe(200);
+    expect((await get('/api/me/favorites')).json().programs).toEqual([]);
+  });
+});

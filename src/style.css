@@ -548,3 +548,35 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+.program-tabs, .program-management { margin-block: 24px; }
+.program-card { overflow-wrap: anywhere; }
+.program-card > .button { width: 100%; }
+.program-card > .button + .button { margin-top: 10px; }
+.program-management .button[aria-pressed='true'], .program-card .button[aria-pressed='true'] { color: var(--accent); border-color: currentColor; }
+.program-editor { max-width: 980px; }
+.builder-fields { margin-top: 30px; }
+.builder-fields > label { max-width: 740px; }
+.builder-fields textarea { width: 100%; resize: vertical; min-height: 100px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; }
+.builder-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.builder-heading h2, .builder-heading h3 { margin: 0; }
+.builder-heading .account-actions { gap: 6px; }
+.builder-heading .button { padding: 10px; }
+.builder-fields .program-step { display: grid; gap: 18px; }
+.builder-fields .program-step > label { max-width: 340px; }
+.builder-fields .program-fields { align-items: start; }
+.builder-fields .program-fields label { min-width: 0; }
+.program-editor > .eyebrow { display: block; margin-top: 24px; }
+.program-editor input, .program-editor select, .program-editor textarea { min-width: 0; }
+.profile-favorites { margin-top: 36px; padding-top: 24px; border-top: 1px solid var(--border); }
+.profile-favorites ul { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 12px; }
+.profile-favorites li { display: grid; gap: 8px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.profile-favorites li a { display: flex; align-items: center; justify-content: space-between; gap: 16px; overflow-wrap: anywhere; }
+.profile-favorites li .icon { flex-shrink: 0; }
+.profile-favorites li span { font-size: 12px; }
+@media (max-width: 600px) {
+  .builder-fields .program-fields { grid-template-columns: 1fr 1fr; }
+  .builder-fields .program-fields label { font-size: 12px; }
+  .program-management .account-actions, .program-tabs { gap: 8px; }
+  .program-tabs .button { padding-inline: 12px; font-size: 12px; }
+}

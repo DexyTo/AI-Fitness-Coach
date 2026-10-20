@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Icon } from '../components/Icon';
 import { useAccount } from './context';
 import { api, messageOf, type User } from './api';
+import { ProfileFavorites } from '../programs/ProgramLibrary';
 
 export const avatars = { sprout:'Росток', bolt:'Молния', sun:'Солнце', mountain:'Горы' };
 export function Avatar({ name }: { name: string }) {
@@ -56,7 +57,8 @@ export function ProfileView() {
   };
   return <main className='profile-page page-enter'><div className='page-heading'><div><span className='eyebrow'>ЛИЧНЫЙ ПРОФИЛЬ</span><h1>Твой ритм<span className='accent'>.</span></h1><p className='muted'>@{user.login} · С нами с {new Date(user.createdAt).toLocaleDateString('ru-RU')}</p></div><Link className='button' to='/history'><Icon name='history' />Открыть историю</Link></div>
     {error && <div role='alert' className='storage-error'>{error} <button className='button' disabled={loading} onClick={() => void load()}>Повторить загрузку</button></div>}
+    <div className='account-actions program-tabs'><Link className='button' to='/my-programs'>Мои программы</Link><Link className='button' to='/favorites'><Icon name='star'/>Избранное</Link><Link className='button' to='/programs/new'>Создать программу <Icon name='arrow'/></Link></div>
     <div className='profile-grid'><section className='account-card'><div className='profile-identity'><Avatar name={avatar} /><div><h2>{user.nickname}</h2><p className='muted'>Твой знак движения</p></div></div><form onSubmit={e => void save(e)}><fieldset disabled={busy} className='account-fields'><label>Никнейм<input required maxLength={32} value={nickname} onChange={e => { setNickname(e.target.value); setNotice(''); }} /></label><fieldset className='avatar-picker'><legend>Выбери аватар</legend>{Object.entries(avatars).map(([id,label]) => <button className='avatar-option' key={id} type='button' aria-label={label} aria-pressed={avatar === id} onClick={() => { setAvatar(id); setNotice(''); }}><Avatar name={id} /><span>{label}</span></button>)}</fieldset><button className='button button-primary' disabled={!nickname.trim()} type='submit'>{busy ? 'Сохранение…' : 'Сохранить профиль'}<Icon name='check' /></button></fieldset></form>{notice && <p role='status' className='accent'>{notice}</p>}</section>
     <section className='profile-summary'><span className='eyebrow'>ПО ДАННЫМ ИСТОРИИ</span><h2>Движение в цифрах</h2>{loading ? <p role='status'>Загружаем показатели…</p> : data && <><div className='profile-stats'><div><strong>{data.stats.workouts}</strong><span>Тренировок</span></div><div><strong>{data.stats.reps}</strong><span>Полных повторов</span></div><div><strong>{Math.floor(data.stats.seconds/60)}</strong><span>Минут с подготовкой</span></div></div><p className='muted'>Камера, видео и явно импортированные записи. Демо отдельно: {data.stats.demos}. Скрытые записи не входят в показатели.</p>{data.stats.workouts === 0 && <Link className='button button-primary' to='/'>Выбрать тренировку <Icon name='arrow' /></Link>}</>}<details><summary>Как хранятся данные</summary><p>Распознавание, видео и поток точек остаются на устройстве. Результаты этого аккаунта хранятся в локальной серверной базе SQLite. Гостевая история хранится отдельно в браузере. В истории можно явно импортировать её без игровых наград и сохранить JSON-копию.</p></details><button className='button button-ghost' disabled={busy} onClick={() => void logout()}>Выйти из аккаунта</button></section></div>
-  </main>;
+  <ProfileFavorites/></main>;
 }

@@ -1,8 +1,13 @@
 import type { ReactNode } from 'react';
 
-type IconName = 'arrow' | 'camera' | 'play' | 'video' | 'squat' | 'pushup' | 'check' | 'history' | 'shield' | 'activity';
+type IconName = 'arrow' | 'camera' | 'play' | 'video' | 'squat' | 'pushup' | 'check' | 'history' | 'shield' | 'activity' | 'star' | 'copy' | 'up' | 'down' | 'trash';
 
 const paths: Record<IconName, ReactNode> = {
+  star: <path d='m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z' />,
+  copy: <><rect x='8' y='8' width='13' height='13' rx='2'/><path d='M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3'/></>,
+  up: <path d='M12 20V4m-6 6 6-6 6 6'/>,
+  down: <path d='M12 4v16m-6-6 6 6 6-6'/>,
+  trash: <><path d='M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7'/></>,
   arrow: <><path d='M5 12h14M13 6l6 6-6 6' /></>,
   camera: <><rect x='3' y='6' width='13' height='12' rx='3' /><path d='m16 10 5-3v10l-5-3' /></>,
   play: <><circle cx='12' cy='12' r='9' /><path d='m10 8 6 4-6 4Z' /></>,

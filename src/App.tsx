@@ -12,6 +12,7 @@ import type { ExerciseType, InputMode } from './exercises/types';
 import { readSelection, selectionSearch } from './routing/selection';
 import './style.css';
 import { ProgramCatalog, ProgramDetails } from './programs/ProgramViews';
+import { ProgramEditor } from './programs/ProgramEditor';
 
 export default function App() {
   const { user } = useAccount();
@@ -48,6 +49,10 @@ export default function App() {
     <Route path='/register' element={<AuthView key='register' register />} />
     <Route path='/profile' element={<ProfileView />} />
     <Route path='/programs' element={<ProgramCatalog />} />
+    <Route path='/my-programs' element={<ProgramCatalog key='mine' scope='mine' />} />
+    <Route path='/favorites' element={<ProgramCatalog key='favorites' scope='favorites' />} />
+    <Route path='/programs/new' element={<ProgramEditor key='new' />} />
+    <Route path='/programs/:id/edit' element={<ProgramEditor key={location.pathname} />} />
     <Route path='/programs/:id' element={<ProgramDetails key={location.pathname} />} />
     <Route path='/history' element={user ? <AccountHistoryView user={user} onHome={() => navigate('home')} /> : <HistoryView onHome={() => navigate('home')} />} />
     <Route path='/history/:id' element={<AccountHistoryDetail />} />
