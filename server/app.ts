@@ -1,5 +1,6 @@
 import Fastify, { type FastifyServerOptions } from 'fastify';
 import type Database from 'better-sqlite3';
+import { ApiError, registerAccounts } from './accounts.js';
 
 export function buildApp(db: Database.Database, logger: FastifyServerOptions['logger'] = false) {
   const app = Fastify({
@@ -14,7 +15,7 @@ export function buildApp(db: Database.Database, logger: FastifyServerOptions['lo
     if (status >= 500) request.log.error({ err: error }, 'API request failed');
     const code = status === 400 ? 'INVALID_REQUEST' : status === 413 ? 'PAYLOAD_TOO_LARGE' : status === 415 ? 'UNSUPPORTED_MEDIA_TYPE' : status >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR';
     const message = status === 400 ? 'Некорректный запрос.' : status === 413 ? 'Слишком большой запрос.' : status === 415 ? 'Неподдерживаемый формат запроса.' : status >= 500 ? 'Внутренняя ошибка сервера.' : 'Запрос отклонён.';
-    void reply.status(status).send({ error: { code, message, requestId: request.id } });
+    void reply.status(status).send({ error: { code: error instanceof ApiError ? error.code : code, message: error instanceof ApiError ? error.message : message, requestId: request.id } });
   });
   app.setNotFoundHandler((request, reply) => {
     void reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Маршрут API не найден.', requestId: request.id } });
@@ -31,5 +32,6 @@ export function buildApp(db: Database.Database, logger: FastifyServerOptions['lo
     const row = db.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations').get() as { version: number };
     return { status: 'ok', database: 'ok', schemaVersion: row.version };
   });
+  registerAccounts(app, db);
   return app;
 }

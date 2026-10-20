@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
-export const projectRoot = fileURLToPath(new URL('../', import.meta.url));
+export const projectRoot = fileURLToPath(new URL(import.meta.url.includes('/.server-build/') ? '../../' : '../', import.meta.url));
 
 export function readConfig(env: Record<string, string | undefined> = process.env) {
   const port = env.API_PORT ?? '3001';

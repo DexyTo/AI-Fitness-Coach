@@ -13,7 +13,7 @@
     "db:migrate": "node --env-file-if-exists=.env --import tsx server/migrate.ts",
     "check:server": "tsc -p tsconfig.server.json --noEmit",
     "build:server": "tsc -p tsconfig.server.json",
-    "start:server": "node --env-file-if-exists=.env .server-build/index.js",
+    "start:server": "node --env-file-if-exists=.env .server-build/server/index.js",
     "test:server": "vitest run server",
     "build": "npm run build:server && tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",

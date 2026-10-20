@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useAccount } from '../account/context';
+import { AccountPersistence } from '../account/api';
 import type { ExerciseType, InputMode, FeedbackCode } from '../exercises/types';
 import { criterionLabels, labels } from '../exercises/types';
 import { criterionTotals, nextTask } from '../exercises/coaching';
@@ -25,6 +27,8 @@ function readable(seconds: number) {
 }
 
 export function TrainingView({ exercise, mode, onHome }: Props) {
+  const { user } = useAccount();
+  const persistence = useMemo(() => user ? new AccountPersistence(user.id) : undefined, [user?.id]);
   const [videoUrl, setVideoUrl] = useState('');
   const [goalFields, setGoalFields] = useState({ sets: '', reps: '', restSeconds: '' });
   const [conditions, setConditions] = useState('');
@@ -50,8 +54,8 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
     confirmSideView,
     seek,
     restart,
-    phase, setNumber, restSeconds, pause, resume, endSet, saveError, retrySave,
-  } = useTraining({ exercise, mode, videoUrl, goal, conditions });
+    phase, setNumber, restSeconds, pause, resume, endSet, saveError, saving, retrySave,
+  } = useTraining({ exercise, mode, videoUrl, goal, conditions, persistence });
   const {
     enabled: voiceEnabled,
     setEnabled: setVoiceEnabled,
@@ -119,13 +123,14 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
         )}
         <div className='result-actions'>
           <button className='button' onClick={() => downloadJson({ schemaVersion: 1, records: [session] }, 'playfit-workout.json')}>Экспорт результата JSON</button>
-          {saveError && <button className='button' onClick={retrySave}>Повторить сохранение</button>}
+          {saveError && <button className='button' disabled={saving} onClick={retrySave}>Повторить сохранение</button>}
           {mode === 'video' && <button className='button' onClick={restart}>Повторить запись с нуля</button>}
           <button className='button button-primary' onClick={onHome}>
             Новая тренировка <span>↗</span>
           </button>
         </div>
-        <p role={saveError ? 'alert' : 'status'} className={saveError ? 'storage-error' : 'muted'}>{saveError || 'Результат сохранён локально в истории этого браузера. Синхронизации между устройствами нет.'}</p>
+        <p role={saveError ? 'alert' : 'status'} className={saveError ? 'storage-error' : 'muted'}>{saving ? 'Сохраняем результат… Не закрывай страницу до подтверждения.' : saveError || (user ? `Результат сохранён в локальной серверной базе аккаунта @${user.login}.` : 'Гостевой результат сохранён в истории этого браузера.')}</p>
+        {mode !== 'camera' && <p className='fine-print'>Демо и анализ видеофайлов не начисляют игровые награды.</p>}
         <details className='result-details'><summary>Подходы, условия и параметры</summary><WorkoutDetails record={session} /></details>
         <p className='disclaimer'>
           Проверки основаны на 2D-точках и приблизительных правилах. Отсутствие замечаний не подтверждает безопасность движения.
@@ -262,7 +267,7 @@ export function TrainingView({ exercise, mode, onHome }: Props) {
         <details className='plan-details'><summary>Условия съёмки и правила подсчёта <span>Необязательно</span></summary>
           <label>Условия съёмки для сравнения<input type='text' maxLength={200} value={conditions} placeholder='Например: комната, камера сбоку, дневной свет' onChange={e => setConditions(e.target.value)} /></label>
           <p>В цель входят только полные оценённые циклы. Неполные и неоценённые попытки сохраняются отдельно. При достижении цели подход завершится автоматически.</p>
-          <p>Для сравнения тренировок укажи одинаковые условия съёмки. Результаты хранятся в этом браузере; видео и координаты не сохраняются. Цель — твой выбор, а не рекомендация нагрузки.</p>
+          <p>Для сравнения тренировок укажи одинаковые условия съёмки. {user ? 'Результаты сохраняются в локальной серверной базе аккаунта.' : 'Гостевые результаты хранятся в этом браузере.'} Видео и поток точек не отправляются на сервер. Цель — твой выбор, а не рекомендация нагрузки.</p>
         </details>
         {Object.values(goalFields).some(Boolean) && !validGoal(goal) && <p className='field-hint'>Заполни три поля целыми числами в указанных диапазонах.</p>}
       </fieldset>}

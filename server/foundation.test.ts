@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { buildApp } from './app.js';
@@ -41,7 +41,7 @@ describe('SQLite migrations', () => {
     const { path, db } = database();
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');
-    expect(migrate(db)).toEqual(['001_foundation.sql']);
+    expect(migrate(db)).toEqual(['001_foundation.sql', '002_accounts.sql']);
     db.prepare('INSERT INTO platform_metadata (key, value) VALUES (?, ?)').run('user-data', 'keep');
     const applied = db.prepare('SELECT * FROM schema_migrations').all();
     db.close();
@@ -59,16 +59,17 @@ describe('SQLite migrations', () => {
     const directory = join(temporaryDirectory(), 'migrations');
     mkdirSync(directory);
     const first = readFileSync(join(projectRoot, 'server/migrations/001_foundation.sql'), 'utf8');
+    for (const name of readdirSync(join(projectRoot,'server/migrations'))) writeFileSync(join(directory,name), readFileSync(join(projectRoot,'server/migrations',name)));
     writeFileSync(join(directory, '001_foundation.sql'), first);
-    writeFileSync(join(directory, '002_pending.sql'), "CREATE TABLE pending (id INTEGER); INSERT INTO platform_metadata VALUES ('pending', 'no');");
-    writeFileSync(join(directory, '003_broken.sql'), 'THIS IS NOT SQL;');
+    writeFileSync(join(directory, '003_pending.sql'), "CREATE TABLE pending (id INTEGER); INSERT INTO platform_metadata VALUES ('pending', 'no');");
+    writeFileSync(join(directory, '004_broken.sql'), 'THIS IS NOT SQL;');
     expect(() => migrate(db, directory)).toThrow();
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'pending'").get()).toBeUndefined();
     expect(db.prepare("SELECT value FROM platform_metadata WHERE key = 'pending'").get()).toBeUndefined();
-    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }]);
+    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }, { version: 2 }]);
     expect(db.prepare("SELECT value FROM platform_metadata WHERE key = 'schema'").get()).toEqual({ value: 'foundation-v1' });
-    writeFileSync(join(directory, '003_broken.sql'), 'CREATE TABLE another (id INTEGER);');
-    expect(migrate(db, directory)).toEqual(['002_pending.sql', '003_broken.sql']);
+    writeFileSync(join(directory, '004_broken.sql'), 'CREATE TABLE another (id INTEGER);');
+    expect(migrate(db, directory)).toEqual(['003_pending.sql', '004_broken.sql']);
     writeFileSync(join(directory, '001_foundation.sql'), first + '\n-- changed');
     expect(() => migrate(db, directory)).toThrow(/изменена/);
   });
@@ -94,7 +95,7 @@ describe('API contract', () => {
     const app = await api();
     const health = await app.inject('/api/health');
     expect(health.statusCode).toBe(200);
-    expect(health.json()).toEqual({ status: 'ok', database: 'ok', schemaVersion: 1 });
+    expect(health.json()).toEqual({ status: 'ok', database: 'ok', schemaVersion: 2 });
     const invalid = await app.inject('/api/health?password=do-not-echo');
     expect(invalid.statusCode).toBe(400);
     expect(invalid.json().error).toEqual({ code: 'INVALID_REQUEST', message: 'Некорректный запрос.', requestId: expect.any(String) });
@@ -108,19 +109,19 @@ describe('API contract', () => {
     app.post('/api/probe', { schema: { body: { type: 'object', required: ['count'], properties: { count: { type: 'integer', minimum: 1 } }, additionalProperties: false } } }, async () => ({ ok: true }));
     app.get('/api/failure', async () => { throw new Error('password=private; Cookie=secret; stack details'); });
     for (const payload of [{ count: '1' }, { count: 0 }, { count: 1, password: 'private' }]) {
-      const response = await app.inject({ method: 'POST', url: '/api/probe', payload });
+      const response = await app.inject({ method: 'POST', url: '/api/probe', headers: { 'x-playfit-request':'1' }, payload });
       expect(response.statusCode).toBe(400);
       expect(response.body).not.toContain('private');
     }
-    expect((await app.inject({ method: 'POST', url: '/api/probe', payload: { count: 1 } })).statusCode).toBe(200);
-    const malformed = await app.inject({ method: 'POST', url: '/api/probe', headers: { 'content-type': 'application/json' }, payload: '{"password":private}' });
+    expect((await app.inject({ method: 'POST', url: '/api/probe', headers: { 'x-playfit-request':'1' }, payload: { count: 1 } })).statusCode).toBe(200);
+    const malformed = await app.inject({ method: 'POST', url: '/api/probe', headers: { 'x-playfit-request':'1', 'content-type': 'application/json' }, payload: '{"password":private}' });
     expect(malformed.statusCode).toBe(400);
     expect(malformed.body).not.toContain('private');
     const failure = await app.inject('/api/failure');
     expect(failure.statusCode).toBe(500);
     expect(failure.json().error).toEqual({ code: 'INTERNAL_ERROR', message: 'Внутренняя ошибка сервера.', requestId: expect.any(String) });
     expect(failure.body).not.toMatch(/password|Cookie|stack|private/);
-    const large = await app.inject({ method: 'POST', url: '/api/probe', payload: { count: 1, data: 'x'.repeat(70_000) } });
+    const large = await app.inject({ method: 'POST', url: '/api/probe', headers: { 'x-playfit-request':'1' }, payload: { count: 1, data: 'x'.repeat(70_000) } });
     expect(large.statusCode).toBe(413);
     expect(large.json().error.code).toBe('PAYLOAD_TOO_LARGE');
   });

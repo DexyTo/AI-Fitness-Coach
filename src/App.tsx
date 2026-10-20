@@ -4,12 +4,16 @@ import { TrainingView } from './components/TrainingView';
 import { HeroCarousel } from './components/HeroCarousel';
 import { HistoryView } from './components/HistoryView';
 import { Icon } from './components/Icon';
+import { useAccount } from './account/context';
+import { AuthView, ProfileView, Avatar } from './account/AccountViews';
+import { AccountHistoryView, AccountHistoryDetail } from './account/AccountHistory';
 import { labels } from './exercises/types';
 import type { ExerciseType, InputMode } from './exercises/types';
 import { readSelection, selectionSearch } from './routing/selection';
 import './style.css';
 
 export default function App() {
+  const { user } = useAccount();
   const location = useLocation();
   const routerNavigate = useNavigate();
   const { exercise, mode } = readSelection(location.search);
@@ -34,11 +38,15 @@ export default function App() {
         <NavLink end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to={{ pathname: '/', search }}>Тренировки</NavLink>
         <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to={{ pathname: '/history', search }}><Icon name='history' />История</NavLink>
       </nav>
-      <span className='nav-indicator'><span className='small-dot' /> Локально и приватно</span>
+      <Link className='account-nav' to={user ? '/profile' : '/login'}>{user ? <><Avatar name={user.avatar} /><span>{user.nickname}</span></> : <><Icon name='shield' /><span>Войти</span></>}</Link>
     </header>
     <div id='main-content' tabIndex={-1}>
     <Routes>
-    <Route path='/history' element={<HistoryView onHome={() => navigate('home')} />} />
+    <Route path='/login' element={<AuthView key='login' />} />
+    <Route path='/register' element={<AuthView key='register' register />} />
+    <Route path='/profile' element={<ProfileView />} />
+    <Route path='/history' element={user ? <AccountHistoryView user={user} onHome={() => navigate('home')} /> : <HistoryView onHome={() => navigate('home')} />} />
+    <Route path='/history/:id' element={<AccountHistoryDetail />} />
     <Route path='/training' element={<TrainingView key={`${exercise}-${mode}`} exercise={exercise} mode={mode} onHome={() => navigate('home')} />} />
     <Route path='/' element={<main className='home page-enter'>
       <HeroCarousel onDemo={() => navigate('training', 'demo')} />

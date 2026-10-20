@@ -15,6 +15,7 @@ import { closeDetector, getDetectorWithMetadata } from '../pose/poseDetector';
 import { VideoTimeline } from '../pose/videoTimeline';
 import { TrainingController, phaseLabels, type SessionPhase, type TrainingGoal, type WorkoutRecord } from '../training/session';
 import { HistoryStore } from '../training/history';
+import { messageOf, type AccountPersistence } from '../account/api';
 
 
 interface Options {
@@ -23,9 +24,10 @@ interface Options {
   videoUrl?: string;
   goal: TrainingGoal;
   conditions: string;
+  persistence?: AccountPersistence;
 }
 
-export function useTraining({ exercise, mode, videoUrl, goal, conditions }: Options) {
+export function useTraining({ exercise, mode, videoUrl, goal, conditions, persistence }: Options) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analyzerRef = useRef(createAnalyzer(exercise));
@@ -44,6 +46,21 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions }: Opti
   const [setNumber, setSetNumber] = useState(1);
   const [restSeconds, setRestSeconds] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const saveBusy = useRef(false);
+  const finalRecord = useRef<WorkoutRecord | null>(null);
+  const saveRecord = async (record: WorkoutRecord) => {
+    if (saveBusy.current) return;
+    saveBusy.current = true; setSaving(true); setSaveError(null);
+    try {
+      if (persistence) await persistence.save(record);
+      else {
+        const error = new HistoryStore().save(record);
+        if (error) throw new Error(error);
+      }
+    } catch (e) { setSaveError(`${messageOf(e)} Результат не подтверждён как сохранённый. Повтори сохранение или экспортируй JSON перед уходом.`); }
+    finally { saveBusy.current = false; setSaving(false); }
+  };
   const startAt = useRef(0),
     clockRef = useRef(0),
     rafRef = useRef(0),
@@ -86,9 +103,11 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions }: Opti
   const finish = () => {
     const controller = controllerRef.current;
     if (!controller) return;
+    if (finalRecord.current) return;
     const record = controller.finish(mode === 'video' ? analysisTime.current : performance.now(), performance.now());
+    finalRecord.current = record;
     setSession(record);
-    setSaveError(new HistoryStore().save(record));
+    void saveRecord(record);
     setPhase('completed');
     stop();
   };
@@ -145,6 +164,7 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions }: Opti
     setSeconds(0);
     setSession(null);
     setSaveError(null);
+    finalRecord.current = null;
     controllerRef.current = null;
     coachingRef.current.reset();
     const video = videoRef.current;
@@ -179,11 +199,13 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions }: Opti
       const detection = mode === 'demo' ? null : await getDetectorWithMetadata();
       const detector = detection?.detector;
       if (cancelled()) return;
+      const run = persistence ? await persistence.begin({ exercise, mode, goal, conditions:conditions.trim() }) : undefined;
+      if (cancelled()) return;
       // A short local recording must not play through while the model is loading.
       if (mode === 'video' && video) await video.play();
       if (cancelled()) return;
       startAt.current = performance.now();
-      controllerRef.current = new TrainingController(exercise, mode, goal, conditions, startAt.current, undefined, undefined, {
+      controllerRef.current = new TrainingController(exercise, mode, goal, conditions, startAt.current, run?.createdAt, run?.id, {
         width: mode === 'demo' ? 1600 : video?.videoWidth ?? 0,
         height: mode === 'demo' ? 1000 : video?.videoHeight ?? 0,
         delegate: detection?.delegate ?? 'synthetic', settings: detection ? { ...detection.settings } : {},
@@ -328,12 +350,13 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions }: Opti
     setNumber,
     restSeconds,
     saveError,
+    saving,
     pause,
     resume,
     endSet,
     retrySave: () => {
       if (!session) return;
-      setSaveError(new HistoryStore().save(session));
+      void saveRecord(session);
     },
     start,
     finish,
@@ -341,6 +364,7 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions }: Opti
     restart: () => {
       stop();
       controllerRef.current = null;
+      finalRecord.current = null;
       setPhase('preparing');
       analyzerRef.current = createAnalyzer(exercise);
       setAnalysis(analyzerRef.current.snapshot());
