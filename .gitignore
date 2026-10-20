@@ -6,3 +6,12 @@ dist
 # Private recordings, annotations and raw validation exports (never commit).
 /validation-private/
 /.validation-build/
+
+# Local platform data and server output. SQL migrations remain tracked.
+/data/playfit.sqlite
+/data/playfit.sqlite-wal
+/data/playfit.sqlite-shm
+/.server-build/
+/.env
+/.env.*
+!/.env.example
