@@ -1,0 +1,10 @@
+:root { font-family: system-ui, sans-serif; color: #e8efe9; background: #101612; }
+body { margin: 0; }
+main { max-width: 960px; padding: 24px; margin: auto; }
+label { display: block; margin: 20px 0 10px; }
+input { display: block; margin-top: 8px; max-width: 100%; }
+button { padding: 10px 16px; margin-top: 8px; cursor: pointer; }
+video { display: block; width: 100%; max-height: 300px; background: #000; }
+pre { padding: 16px; overflow: auto; background: #1b2720; max-height: 600px; }
+a { display: inline-block; color: #b0edb4; margin: 16px 16px 0 0; }
+:focus-visible { outline: 3px solid #b0edb4; outline-offset: 3px; }

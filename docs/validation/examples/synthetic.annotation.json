@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "material": "synthetic",
+  "clipId": "synthetic-metrics-v1",
+  "participantGroupId": "synthetic-group",
+  "split": "control",
+  "permission": { "allowed": true, "reference": "Hand-built artificial metric fixture; no person or video" },
+  "video": { "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "durationMs": 6000 },
+  "exercise": "squat",
+  "variant": "bodyweight-side",
+  "view": "side",
+  "conditions": ["synthetic-metric-example", "no-video-no-model-inference"],
+  "annotation": { "revision": "synthetic-1", "source": "synthetic", "reviewer": "unreviewed", "protocolVersion": "playfit-validation-v1", "rulesVersion": "provisional-side-v1" },
+  "sideConfirmationsMs": [],
+  "unassessable": [],
+  "attempts": [
+    { "id": "a", "startMs": 1000, "endMs": 2000, "outcome": "complete", "criteria": { "depth": { "status": "passed" }, "extension": { "status": "passed" }, "lean": { "status": "deviation", "onsetMs": 1400 } } },
+    { "id": "b", "startMs": 2600, "endMs": 3500, "outcome": "incomplete", "criteria": { "depth": { "status": "deviation", "onsetMs": 3000 }, "extension": { "status": "passed" }, "lean": { "status": "passed" } } },
+    { "id": "c", "startMs": 4000, "endMs": 5000, "outcome": "complete", "criteria": { "depth": { "status": "passed" }, "extension": { "status": "passed" }, "lean": { "status": "passed" } } }
+  ]
+}

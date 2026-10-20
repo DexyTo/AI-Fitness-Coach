@@ -1,0 +1,227 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": "playfit-validation-v1",
+  "evidence": "synthetic-only",
+  "clipId": "synthetic-metrics-v1",
+  "participantGroupId": "synthetic-group",
+  "split": "control",
+  "video": {
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "durationMs": 6000,
+    "width": 640,
+    "height": 480
+  },
+  "sampleIntervalMs": 200,
+  "sideConfirmationsMs": [],
+  "annotation": {
+    "revision": "synthetic-1",
+    "source": "synthetic",
+    "reviewer": "unreviewed",
+    "protocolVersion": "playfit-validation-v1",
+    "rulesVersion": "provisional-side-v1"
+  },
+  "rulesVersion": "provisional-side-v1",
+  "runMetadata": {
+    "synthetic": true,
+    "source": "Hand-built metric example; no video, MediaPipe or wall-clock measurement"
+  },
+  "matching": {
+    "startToleranceMs": 1000,
+    "endToleranceMs": 1000,
+    "method": "ordered-max-cardinality-min-boundary-error",
+    "pairs": [
+      {
+        "referenceId": "a",
+        "predictedId": 1,
+        "startErrorMs": 100,
+        "endErrorMs": 200,
+        "detectionLatencyMs": 200
+      },
+      {
+        "referenceId": "b",
+        "predictedId": 2,
+        "startErrorMs": 100,
+        "endErrorMs": 100,
+        "detectionLatencyMs": 100
+      }
+    ],
+    "missedReferenceIds": [
+      "c"
+    ],
+    "extraPredictedIds": [
+      3
+    ],
+    "excludedReferenceIds": [],
+    "excludedPredictedIds": []
+  },
+  "count": {
+    "referenceReps": 2,
+    "predictedReps": 3,
+    "signedError": 1,
+    "absoluteError": 1,
+    "referenceAttempts": 3,
+    "predictedAttempts": 3,
+    "missed": 1,
+    "extra": 1,
+    "outcomeConfusion": {
+      "complete->complete": 1,
+      "incomplete->complete": 1
+    }
+  },
+  "criteria": {
+    "depth": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 1,
+      "tn": 1,
+      "abstained": 0,
+      "ignoredReference": 0,
+      "missingNegativeAttempt": 1,
+      "precision": null,
+      "recall": 0,
+      "latencyMs": {
+        "count": 0,
+        "mean": null,
+        "p50": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "latencyUnavailable": 0
+    },
+    "extension": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "tn": 2,
+      "abstained": 0,
+      "ignoredReference": 0,
+      "missingNegativeAttempt": 1,
+      "precision": null,
+      "recall": null,
+      "latencyMs": {
+        "count": 0,
+        "mean": null,
+        "p50": null,
+        "p95": null,
+        "min": null,
+        "max": null
+      },
+      "latencyUnavailable": 0
+    },
+    "lean": {
+      "tp": 1,
+      "fp": 2,
+      "fn": 0,
+      "tn": 0,
+      "abstained": 0,
+      "ignoredReference": 0,
+      "missingNegativeAttempt": 1,
+      "precision": 0.3333333333333333,
+      "recall": 1,
+      "latencyMs": {
+        "count": 1,
+        "mean": 400,
+        "p50": 400,
+        "p95": 400,
+        "min": 400,
+        "max": 400
+      },
+      "latencyUnavailable": 0
+    }
+  },
+  "timing": {
+    "startErrorMs": {
+      "count": 2,
+      "mean": 100,
+      "p50": 100,
+      "p95": 100,
+      "min": 100,
+      "max": 100
+    },
+    "endErrorMs": {
+      "count": 2,
+      "mean": 150,
+      "p50": 100,
+      "p95": 200,
+      "min": 100,
+      "max": 200
+    },
+    "detectionLatencyMs": {
+      "count": 2,
+      "mean": 150,
+      "p50": 100,
+      "p95": 200,
+      "min": 100,
+      "max": 200
+    }
+  },
+  "coverage": {
+    "totalDurationMs": 6000,
+    "eligibleDurationMs": 6000,
+    "excludedMs": 0,
+    "observedMs": 1600,
+    "sufficientMs": 1200,
+    "sufficientFraction": 0.2,
+    "pointReadyMs": 1200,
+    "preparedMs": 1200,
+    "perCriterionMs": {
+      "depth": 1200,
+      "extension": 1200,
+      "lean": 1200
+    },
+    "perCriterionFraction": {
+      "depth": 0.2,
+      "extension": 0.2,
+      "lean": 0.2
+    },
+    "viewMs": {
+      "side": 1200,
+      "unsuitable": 0,
+      "unknown": 400,
+      "not_required": 0
+    },
+    "referenceView": "side",
+    "sideChanges": 0,
+    "manualConfirmations": 0
+  },
+  "performance": {
+    "wallMs": 500,
+    "initializationMs": 100,
+    "decodingAndAnalysisMs": 400,
+    "duplicateFrames": 0,
+    "processedFrames": 4,
+    "processingFramesPerSecond": 10,
+    "videoSecondsPerWallSecond": 15,
+    "detectorMs": {
+      "count": 4,
+      "mean": 10,
+      "p50": 10,
+      "p95": 10,
+      "min": 10,
+      "max": 10
+    },
+    "analyzerMs": {
+      "count": 4,
+      "mean": 1,
+      "p50": 1,
+      "p95": 1,
+      "min": 1,
+      "max": 1
+    },
+    "sourceIntervalsMs": {
+      "count": 3,
+      "mean": 1833.3333333333333,
+      "p50": 1500,
+      "p95": 2500,
+      "min": 1500,
+      "max": 2500
+    }
+  },
+  "limitations": [
+    "Provisional 2D rules; no clinical validation.",
+    "Single clip; do not combine calibration and control or infer population accuracy.",
+    "Offline sampled frames; app playback, voice and camera require separate checks.",
+    "No-event precision/recall and missing latency are null, never perfect scores."
+  ]
+}

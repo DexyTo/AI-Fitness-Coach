@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PlayFit Vision — локальная валидация</title>
+  </head>
+  <body>
+    <main>
+      <h1>Локальная валидация</h1>
+      <p>Видео обрабатывается на устройстве. Выбирайте только записи с разрешением на использование. Правила предварительные, клиническая валидация не проводилась.</p>
+      <p>Инструкция и формат: <code>docs/validation/README.md</code>. Сохраняйте выгрузки в <code>validation-private/</code>. Не закрывайте вкладку во время прогона.</p>
+      <label>1. Локальное видео <input id="video-file" type="file" accept="video/*" /></label>
+      <button id="inspect" type="button">Получить SHA-256 и длительность для разметки</button>
+      <label>2. Эталонная разметка JSON <input id="annotation-file" type="file" accept=".json" /></label>
+      <label>Интервал выборки, мс (16–200) <input id="interval" type="number" min="16" max="200" value="50" /></label>
+      <button id="run" type="button">Прогнать MediaPipe и сравнить</button>
+      <label>Сравнить готовую сырую выгрузку JSON <input id="run-file" type="file" accept=".json" /></label>
+      <button id="compare" type="button">Сравнить выгрузку с разметкой</button>
+      <p role="status" id="status">Ожидается видео и разметка.</p>
+      <video id="video" playsinline muted aria-label="Обрабатываемая запись"></video>
+      <nav id="downloads" aria-label="Скачать результаты"></nav>
+      <pre id="output" aria-label="Результат проверки"></pre>
+    </main>
+    <script type="module" src="/src/validation/page.ts"></script>
+  </body>
+</html>

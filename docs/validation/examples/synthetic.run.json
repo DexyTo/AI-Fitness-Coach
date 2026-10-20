@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": "playfit-validation-v1",
+  "rulesVersion": "provisional-side-v1",
+  "clipId": "synthetic-metrics-v1",
+  "exercise": "squat",
+  "variant": "bodyweight-side",
+  "video": { "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "durationMs": 6000, "width": 640, "height": 480 },
+  "sampleIntervalMs": 200,
+  "sideConfirmationsMs": [],
+  "metadata": { "synthetic": true, "source": "Hand-built metric example; no video, MediaPipe or wall-clock measurement" },
+  "performance": { "wallMs": 500, "initializationMs": 100, "decodingAndAnalysisMs": 400, "duplicateFrames": 0 },
+  "frames": [
+    { "atMs": 0, "observation": { "status": "ready", "side": "left", "reasons": [] }, "preparation": { "stage": "ready", "view": "side", "viewConfirmed": false, "message": "synthetic" }, "sufficient": true, "observableCriteria": ["depth", "extension", "lean"], "feedback": [], "detectorMs": 10, "analyzerMs": 1 },
+    { "atMs": 1500, "observation": { "status": "ready", "side": "left", "reasons": [] }, "preparation": { "stage": "active", "view": "side", "viewConfirmed": false, "message": "synthetic" }, "sufficient": true, "observableCriteria": ["depth", "extension", "lean"], "feedback": ["lean"], "detectorMs": 10, "analyzerMs": 1 },
+    { "atMs": 3000, "observation": { "status": "unavailable", "side": null, "reasons": [{ "code": "no_pose" }] }, "preparation": { "stage": "recovering", "view": "unknown", "viewConfirmed": false, "message": "synthetic" }, "sufficient": false, "observableCriteria": [], "feedback": [], "detectorMs": 10, "analyzerMs": 1 },
+    { "atMs": 5500, "observation": { "status": "ready", "side": "left", "reasons": [] }, "preparation": { "stage": "active", "view": "side", "viewConfirmed": false, "message": "synthetic" }, "sufficient": true, "observableCriteria": ["depth", "extension", "lean"], "feedback": ["lean"], "detectorMs": 10, "analyzerMs": 1 }
+  ],
+  "attempts": [
+    { "id": 1, "startedAt": 1100, "endedAt": 2200, "outcome": "complete", "endReason": "returned_to_top", "motionComplete": true, "minAngle": 90,
+      "criteria": { "depth": { "status": "passed", "observedFrames": 10, "reasons": [] }, "extension": { "status": "passed", "observedFrames": 10, "reasons": [] }, "lean": { "status": "deviation", "observedFrames": 10, "reasons": [] } },
+      "remarks": ["lean"], "reasons": [], "detectedAtMs": 2200, "remarkDetectedAtMs": { "lean": 1800 } },
+    { "id": 2, "startedAt": 2700, "endedAt": 3600, "outcome": "complete", "endReason": "returned_to_top", "motionComplete": true, "minAngle": 90,
+      "criteria": { "depth": { "status": "passed", "observedFrames": 10, "reasons": [] }, "extension": { "status": "passed", "observedFrames": 10, "reasons": [] }, "lean": { "status": "deviation", "observedFrames": 10, "reasons": [] } },
+      "remarks": ["lean"], "reasons": [], "detectedAtMs": 3600, "remarkDetectedAtMs": { "lean": 3200 } },
+    { "id": 3, "startedAt": 5200, "endedAt": 5900, "outcome": "complete", "endReason": "returned_to_top", "motionComplete": true, "minAngle": 90,
+      "criteria": { "depth": { "status": "passed", "observedFrames": 10, "reasons": [] }, "extension": { "status": "passed", "observedFrames": 10, "reasons": [] }, "lean": { "status": "deviation", "observedFrames": 10, "reasons": [] } },
+      "remarks": ["lean"], "reasons": [], "detectedAtMs": 5900, "remarkDetectedAtMs": { "lean": 5500 } }
+  ]
+}

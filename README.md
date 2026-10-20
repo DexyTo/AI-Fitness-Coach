@@ -83,3 +83,9 @@ MediaPipe Pose Landmarker (в браузере)
 - Если браузер не поддерживает синтез речи, текстовые подсказки продолжают работать, а переключатель звука недоступен.
 
 Модель взята из [официального семейства MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker/web_js). Подробности API: [руководство MediaPipe для Web](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker/web_js).
+
+## Локальная валидация видео
+
+Отдельная страница `/validation.html` прогоняет разрешённый локальный файл через MediaPipe и анализатор, экспортирует таймкоды/версии и сравнивает результат с независимой разметкой. [Запуск и метрики](docs/validation/README.md), [формат набора](docs/validation/format.md), [памятка разметчику](docs/validation/annotator.md), [текущий отчёт](docs/validation/REPORT.md). Частные материалы и выгрузки храните в игнорируемой `validation-private/`, не в `public/`.
+
+Инструменты и синтетические проверки готовы; реальные записи и эталонная разметка пока отсутствуют. Качество на людях и предварительные правила техники не валидированы.
