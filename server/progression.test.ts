@@ -176,7 +176,7 @@ describe('server progression accounting', () => {
     const record=fixture('old-run','2026-10-01T00:00:00Z');
     db.prepare('INSERT INTO workout_runs VALUES (?,?,?,?,?)').run('old-run','old','old-request','{}',record.date);
     db.prepare("INSERT INTO workout_results (id,user_id,run_id,source,source_version,record_json,created_at) VALUES ('old-result','old','old-run','training',1,?,?)").run(JSON.stringify(record),record.date);
-    expect(migrate(db)).toEqual(['005_progression.sql','006_challenges.sql','007_duels.sql']);expect(migrate(db)).toEqual([]);
+    expect(migrate(db)).toEqual(['005_progression.sql','006_challenges.sql','007_duels.sql','008_leaderboard_demo.sql']);expect(migrate(db)).toEqual([]);
     expect(db.prepare('SELECT reward_rules_version FROM workout_runs').get()).toEqual({reward_rules_version:null});
     expect(progression(db,'old').xp).toBe(0);expect(db.prepare('SELECT COUNT(*) AS n FROM workout_results').get()).toEqual({n:1});
   });

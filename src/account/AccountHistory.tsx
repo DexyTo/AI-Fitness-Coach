@@ -16,6 +16,7 @@ function exportResults(results: AccountResult[]) {
   downloadJson(accountHistoryExport(results),'playfit-account-history.json');
 }
 function SourceLabel({ result }: { result:AccountResult }) {
+  if (result.isDemo) return <p className='record-source'><span className='mode-badge demo'>Учебные данные</span> · {result.record.mode === 'demo' ? 'Синтетическое демо · без игровых наград' : 'Учебный результат · очки только в учебном рейтинге'}</p>;
   return <p className='record-source'>{result.source === 'historical_import' ? `Исторический импорт · v${result.sourceVersion} · без игровых наград` : 'Новый запуск аккаунта'} · {modeLabels[result.record.mode]}{result.record.mode !== 'camera' && result.source !== 'historical_import' ? ' · без игровых наград' : ''}</p>;
 }
 type ImportPreview = { records:WorkoutRecord[]; added:number; existing:number };

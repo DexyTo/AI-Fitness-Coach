@@ -2,6 +2,7 @@ import type { ProgramSnapshot } from './program.js';
 
 export type ChallengeState = 'upcoming' | 'active' | 'completed' | 'expired';
 export interface ChallengeDefinition {
+  isDemo?: boolean;
   id: string; version: number; title: string; description: string; educational: true;
   startsAt: string; endsAt: string; type: 'program' | 'workouts'; target: number;
   task: ProgramSnapshot; reward: { xp: number; points: number }; rulesVersion: 'challenges-v1';

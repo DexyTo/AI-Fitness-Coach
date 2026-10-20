@@ -21,7 +21,8 @@
     "test": "vitest run",
     "validation:test": "vitest run src/validation",
     "validation:fixture": "node tools/validation/make-blank-video.mjs",
-    "validation:report": "vite build --ssr tools/validation/report.mjs --outDir .validation-build && node .validation-build/report.js"
+    "validation:report": "vite build --ssr tools/validation/report.mjs --outDir .validation-build && node .validation-build/report.js",
+    "db:seed:demo": "node --env-file-if-exists=.env --import tsx server/seedDemo.ts"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.0.1",

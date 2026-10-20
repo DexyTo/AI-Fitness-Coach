@@ -2,8 +2,9 @@ import type { WorkoutRecord, TrainingGoal } from '../training/session';
 import type { ExerciseType, InputMode } from '../exercises/types';
 import { isProgram, type HistoryRecord, type ProgramRecord, type ProgramSnapshot } from '../../shared/program';
 import type { RewardReceipt } from '../../shared/progression';
-export interface User { id: string; login: string; nickname: string; avatar: string; createdAt: string }
+export interface User { id: string; login: string; nickname: string; avatar: string; createdAt: string; isDemo?: boolean }
 export interface AccountResult {
+  isDemo?: boolean;
   id: string; runId: string | null; source: 'training' | 'historical_import'; sourceVersion: number;
   originalId: string | null; createdAt: string; archivedAt: string | null; record: HistoryRecord; reward?: RewardReceipt;
 }

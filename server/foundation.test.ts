@@ -41,7 +41,7 @@ describe('SQLite migrations', () => {
     const { path, db } = database();
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');
-    expect(migrate(db)).toEqual(['001_foundation.sql', '002_accounts.sql', '003_programs.sql', '004_builder.sql', '005_progression.sql', '006_challenges.sql','007_duels.sql']);
+    expect(migrate(db)).toEqual(['001_foundation.sql', '002_accounts.sql', '003_programs.sql', '004_builder.sql', '005_progression.sql', '006_challenges.sql','007_duels.sql','008_leaderboard_demo.sql']);
     db.prepare('INSERT INTO platform_metadata (key, value) VALUES (?, ?)').run('user-data', 'keep');
     const applied = db.prepare('SELECT * FROM schema_migrations').all();
     db.close();
@@ -61,15 +61,15 @@ describe('SQLite migrations', () => {
     const first = readFileSync(join(projectRoot, 'server/migrations/001_foundation.sql'), 'utf8');
     for (const name of readdirSync(join(projectRoot,'server/migrations'))) writeFileSync(join(directory,name), readFileSync(join(projectRoot,'server/migrations',name)));
     writeFileSync(join(directory, '001_foundation.sql'), first);
-    writeFileSync(join(directory, '008_pending.sql'), "CREATE TABLE pending (id INTEGER); INSERT INTO platform_metadata VALUES ('pending', 'no');");
-    writeFileSync(join(directory, '009_broken.sql'), 'THIS IS NOT SQL;');
+    writeFileSync(join(directory, '009_pending.sql'), "CREATE TABLE pending (id INTEGER); INSERT INTO platform_metadata VALUES ('pending', 'no');");
+    writeFileSync(join(directory, '010_broken.sql'), 'THIS IS NOT SQL;');
     expect(() => migrate(db, directory)).toThrow();
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'pending'").get()).toBeUndefined();
     expect(db.prepare("SELECT value FROM platform_metadata WHERE key = 'pending'").get()).toBeUndefined();
-    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }, { version: 2 }, {version:3}, {version:4}, {version:5}, {version:6}, {version:7}]);
+    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }, { version: 2 }, {version:3}, {version:4}, {version:5}, {version:6}, {version:7}, {version:8}]);
     expect(db.prepare("SELECT value FROM platform_metadata WHERE key = 'schema'").get()).toEqual({ value: 'foundation-v1' });
-    writeFileSync(join(directory, '009_broken.sql'), 'CREATE TABLE another (id INTEGER);');
-    expect(migrate(db, directory)).toEqual(['008_pending.sql', '009_broken.sql']);
+    writeFileSync(join(directory, '010_broken.sql'), 'CREATE TABLE another (id INTEGER);');
+    expect(migrate(db, directory)).toEqual(['009_pending.sql', '010_broken.sql']);
     writeFileSync(join(directory, '001_foundation.sql'), first + '\n-- changed');
     expect(() => migrate(db, directory)).toThrow(/изменена/);
   });
@@ -95,7 +95,7 @@ describe('API contract', () => {
     const app = await api();
     const health = await app.inject('/api/health');
     expect(health.statusCode).toBe(200);
-    expect(health.json()).toEqual({ status: 'ok', database: 'ok', schemaVersion: 7 });
+    expect(health.json()).toEqual({ status: 'ok', database: 'ok', schemaVersion: 8 });
     const invalid = await app.inject('/api/health?password=do-not-echo');
     expect(invalid.statusCode).toBe(400);
     expect(invalid.json().error).toEqual({ code: 'INVALID_REQUEST', message: 'Некорректный запрос.', requestId: expect.any(String) });

@@ -121,7 +121,10 @@ export function registerDuels(app: FastifyInstance, db: Database.Database, requi
   const codeParams = obj({ code: { type: 'string', pattern: '^[A-Fa-f0-9]{16}$' } });
   const byCode = (code: string) => db.prepare('SELECT * FROM duels WHERE code=?').get(code.toUpperCase()) as DuelRow | undefined ?? fail(404, 'NOT_FOUND', 'Приглашение не найдено. Проверь код.');
   app.get<{ Params: { code: string } }>('/api/duel-invitations/:code', { schema: { params: codeParams, querystring: empty } }, async req => {
-    requireUser(req); const d = byCode(req.params.code); refresh(d.id); const fresh = find(db, d.id)!;
+    const user = requireUser(req), d = byCode(req.params.code);
+    const demo = (id: string) => !!db.prepare('SELECT 1 FROM demo_users WHERE user_id=?').get(id);
+    if (demo(user.id) !== demo(d.creator_id)) fail(409, 'DEMO_SEPARATE', 'Учебные участники играют только с учебными аккаунтами.');
+    refresh(d.id); const fresh = find(db, d.id)!;
     const creator = db.prepare('SELECT nickname,avatar FROM users WHERE id=?').get(d.creator_id) as DuelInvitation['creator'];
     const invitation: DuelInvitation = { id: d.id, code: d.code, state: fresh.state, endsAt: d.ends_at, task: JSON.parse(d.task_json), rules: JSON.parse(d.rules_json), creator };
     return { invitation };
@@ -130,6 +133,8 @@ export function registerDuels(app: FastifyInstance, db: Database.Database, requi
     const user = requireUser(req), d = byCode(req.params.code); refresh(d.id);
     return db.transaction(() => {
       const fresh = find(db, d.id)!;
+      const demo = (id: string) => !!db.prepare('SELECT 1 FROM demo_users WHERE user_id=?').get(id);
+      if (demo(user.id) !== demo(fresh.creator_id)) fail(409, 'DEMO_SEPARATE', 'Учебные участники играют только с учебными аккаунтами.');
       if (user.id === fresh.creator_id) fail(409, 'DUEL_SELF', 'Пригласи другой аккаунт. Нельзя принять свою дуэль.');
       if (members(db, d.id).some(p => p.user_id === user.id)) return { duel: duelView(db, d.id, user.id) };
       if (fresh.state !== 'invited') fail(409, 'DUEL_UNAVAILABLE', 'Приглашение уже принято, отменено или срок истёк.');

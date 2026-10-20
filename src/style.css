@@ -644,3 +644,50 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 .duel-score { font-size:2rem; color:var(--accent); }
 .duel-draft-details { margin-top:32px; }
 @media(max-width:700px) { .duel-entry-grid { grid-template-columns:1fr; gap:16px; } .duel-status .button { width:100%; } }
+
+/* Ranking keeps the same surfaces and makes the score distinct from XP. */
+.app-shell .site-header { flex-wrap:wrap; height:auto; min-height:88px; padding-block:16px; }
+.app-shell .site-header nav { flex-wrap:wrap; justify-content:center; gap:4px; }
+.site-header .nav-link { padding-inline:12px; }
+.demo-session { max-width:1328px; margin:16px auto 0; padding:14px 24px; border:1px solid var(--accent); border-radius:12px; font-size:13px; line-height:1.7; }
+.demo-session a { text-decoration:underline; }
+.ranking-filters { display:flex; flex-wrap:wrap; justify-content:space-between; gap:24px; margin:32px 0 24px; }
+.ranking-filters fieldset { padding:0; border:0; margin:0; display:flex; gap:8px; flex-wrap:wrap; }
+.ranking-filters legend { color:var(--muted); font-size:12px; margin-bottom:12px; }
+.ranking-filters .button[aria-pressed='true'] { color:var(--accent); border-color:var(--accent); background:var(--surface); }
+.ranking-personal { margin:26px 0; }
+.ranking-personal h2 { font-size:16px; font-weight:600; }
+.ranking-list, .public-achievements, .public-results { list-style:none; margin:0; padding:0; }
+.ranking-row, .ranking-head { display:grid; grid-template-columns:60px minmax(0,1fr) 100px; align-items:center; gap:20px; padding:20px 24px; border-bottom:1px solid var(--border); }
+.ranking-head { color:var(--muted); font-size:12px; }
+.ranking-head > :last-child { text-align:right; }
+.ranking-own { background:var(--surface); box-shadow:inset 3px 0 var(--accent); }
+.ranking-place { font-size:24px; font-weight:500; font-variant-numeric:tabular-nums; }
+.ranking-person { display:flex; align-items:center; gap:16px; min-width:0; }
+.ranking-person:hover strong { text-decoration:underline; }
+.ranking-person .avatar { flex-shrink:0; width:44px; height:44px; }
+.ranking-person > span { min-width:0; overflow-wrap:anywhere; }
+.ranking-person small { display:block; margin-top:6px; font-size:12px; font-weight:400; color:var(--muted); }
+.ranking-person strong small { display:inline; color:var(--accent); }
+.ranking-points { font-size:25px; text-align:right; font-variant-numeric:tabular-nums; }
+.ranking-points small { display:block; color:var(--muted); font-size:11px; font-weight:400; }
+.ranking-pagination { margin-top:24px; align-items:center; }
+.public-identity { display:flex; align-items:center; gap:24px; margin-top:36px; }
+.public-identity h1 { margin:12px 0; }
+.public-identity .avatar { flex-shrink:0; }
+.public-achievements { display:flex; flex-wrap:wrap; gap:16px; }
+.public-achievements li { display:flex; align-items:center; gap:16px; border:1px solid var(--border); border-radius:14px; padding:20px; }
+.public-achievements .icon { color:var(--accent); }
+.public-achievements small { display:block; margin-top:8px; color:var(--muted); font-size:11px; }
+.public-results li { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:20px 0; border-bottom:1px solid var(--border); overflow-wrap:anywhere; }
+.public-results li > strong { flex-shrink:0; }
+.public-results p { font-size:12px; }
+@media(max-width:1250px) { .app-shell .site-header nav { order:3; width:100%; } }
+@media(max-width:640px) {
+  .ranking-row,.ranking-head { grid-template-columns:34px minmax(0,1fr) 55px; gap:10px; padding:18px 8px; }
+  .ranking-person { gap:10px; font-size:13px; }.ranking-person .avatar { width:32px; height:32px; }.ranking-person small { font-size:10px; }
+  .ranking-points,.ranking-place { font-size:21px; }.ranking-filters .button { font-size:12px; padding-inline:12px; }
+  .demo-session { margin-inline:18px; padding:12px; font-size:12px; }
+  .public-identity { align-items:flex-start; gap:16px; }.public-identity .avatar { width:48px; height:48px; }
+  .public-results li { align-items:start; font-size:13px; }.public-results li > strong { font-size:12px; }
+}

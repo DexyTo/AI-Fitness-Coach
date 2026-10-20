@@ -9,6 +9,7 @@ import { isProgram, same, validPlan, validProgramRecord, type HistoryRecord, typ
 import { accountCompletion, progression, receipt, RULES_VERSION } from './progression.js';
 import { activeChallenges, challengeReceipt, completeChallenge, registerChallenges } from './challenges.js';
 import { checkDuelCompletion, completeDuel, listDuels, registerDuels } from './duels.js';
+import { registerLeaderboard } from './leaderboard.js';
 
 export class ApiError extends Error {
   constructor(readonly statusCode: number, readonly code: string, message: string) { super(message); }
@@ -27,10 +28,10 @@ async function passwordHash(password: string) {
   const salt = randomBytes(16).toString('hex');
   return `scrypt-65536-8-1$${salt}$${(await derive(password, salt)).toString('hex')}`;
 }
-interface User { id: string; login: string; nickname: string; avatar: string; createdAt: string }
+interface User { id: string; login: string; nickname: string; avatar: string; createdAt: string; isDemo?: boolean }
 interface ResultRow { id: string; user_id: string; run_id: string | null; source: string; source_version: number; original_id: string | null; record_json: string; created_at: string; archived_at: string | null }
 type Snapshot = { exercise: WorkoutRecord['exercise']; mode: WorkoutRecord['mode']; goal: TrainingGoal; conditions: string } | ProgramSnapshot;
-const userColumns = 'u.id, u.login, u.nickname, u.avatar, u.created_at AS createdAt';
+const userColumns = 'u.id, u.login, u.nickname, u.avatar, u.created_at AS createdAt, EXISTS(SELECT 1 FROM demo_users d WHERE d.user_id=u.id) AS isDemo';
 const idSchema = { type: 'string', minLength: 1, maxLength: 128 };
 const credentials = obj({ login: { type: 'string', pattern: '^[a-zA-Z0-9_]{3,32}$' }, password: { type: 'string', minLength: 8, maxLength: 128 } });
 const emptyQuery = obj({});
@@ -42,7 +43,7 @@ function validateRecord(value: unknown): asserts value is WorkoutRecord {
 export function registerAccounts(app: FastifyInstance, db: Database.Database) {
   const serializedResult = (row: ResultRow) => {
     const challenge = challengeReceipt(db,row.id);
-    return { id: row.id, runId: row.run_id, source: row.source, sourceVersion: row.source_version, originalId: row.original_id, createdAt: row.created_at, archivedAt: row.archived_at, record: JSON.parse(row.record_json) as HistoryRecord, reward: { ...receipt(db,row.user_id,row.id,row.source), ...(challenge ? { challenge } : {}) } };
+    return { id: row.id, runId: row.run_id, source: row.source, sourceVersion: row.source_version, originalId: row.original_id, createdAt: row.created_at, archivedAt: row.archived_at, isDemo: !!db.prepare('SELECT 1 FROM demo_users WHERE user_id=?').get(row.user_id), record: JSON.parse(row.record_json) as HistoryRecord, reward: { ...receipt(db,row.user_id,row.id,row.source), ...(challenge ? { challenge } : {}) } };
   };
   const token = (req: FastifyRequest) => {
     const candidate = req.headers.cookie?.split(';').map(v => v.trim()).find(v => v.startsWith('playfit_session='))?.slice(16);
@@ -50,7 +51,8 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
   };
   const current = (req: FastifyRequest) => {
     const raw = token(req);
-    return raw ? db.prepare(`SELECT ${userColumns} FROM users u JOIN auth_sessions s ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`).get(hash(raw), new Date().toISOString()) as User | undefined : undefined;
+    const row = raw ? db.prepare(`SELECT ${userColumns} FROM users u JOIN auth_sessions s ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`).get(hash(raw), new Date().toISOString()) as User | undefined : undefined;
+    return row ? { ...row, isDemo: Boolean(row.isDemo) } : undefined;
   };
   const requireUser = (req: FastifyRequest) => {
     const user = current(req) ?? fail(401, 'AUTH_REQUIRED', 'Войди в аккаунт и повтори действие.');
@@ -70,6 +72,7 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
   registerPrograms(app,db,requireUser,req => req.headers['x-playfit-user'] !== undefined ? requireUser(req) : current(req),fail);
   registerChallenges(app,db,requireUser,req => req.headers['x-playfit-user'] !== undefined ? requireUser(req) : current(req),fail);
   registerDuels(app,db,requireUser,fail);
+  registerLeaderboard(app,db,req => req.headers['x-playfit-user'] !== undefined ? requireUser(req) : current(req),fail);
   const attempts = new Map<string, { count: number; until: number }>();
   let activeKdf = 0;
   async function authLimit(req: FastifyRequest, work: () => Promise<User>) {
@@ -110,7 +113,7 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
       const [,salt,key] = row?.password_hash.split('$') ?? ['', '0'.repeat(32), '0'.repeat(128)];
       const actual = await derive(req.body.password,salt);
       if (!row || !timingSafeEqual(actual,Buffer.from(key,'hex'))) fail(401, 'INVALID_CREDENTIALS', 'Неверный логин или пароль.');
-      return { id: row.id, login: row.login, nickname: row.nickname, avatar: row.avatar, createdAt: row.createdAt };
+      return { id: row.id, login: row.login, nickname: row.nickname, avatar: row.avatar, createdAt: row.createdAt, isDemo: 'isDemo' in row && Boolean(row.isDemo) };
     });
     createSession(req,reply,user.id);
     return { user };

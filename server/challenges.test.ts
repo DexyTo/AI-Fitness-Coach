@@ -238,7 +238,7 @@ describe('repeatable weekly challenge seeding and migration',()=>{
     const db=openDatabase(join(s.dir,'old.sqlite'));cleanups.push(()=>db.close());migrate(db,oldDir);
     db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?)').run('old','old','test-only','old','sprout','2026-10-01T00:00:00Z');
     db.prepare('INSERT INTO workout_runs (id,user_id,request_id,snapshot_json,created_at,reward_rules_version) VALUES (?,?,?,?,?,?)').run('old-run','old','request','{}','2026-10-01T00:00:00Z','progression-v1');
-    expect(migrate(db)).toEqual(['006_challenges.sql','007_duels.sql']);expect(migrate(db)).toEqual([]);
+    expect(migrate(db)).toEqual(['006_challenges.sql','007_duels.sql','008_leaderboard_demo.sql']);expect(migrate(db)).toEqual([]);
     expect(db.prepare('SELECT challenge_participation_id FROM workout_runs').get()).toEqual({challenge_participation_id:null});
     seedChallenges(db);expect(db.prepare('SELECT COUNT(*) AS n FROM challenge_participations').get()).toEqual({n:0});expect(progression(db,'old').xp).toBe(0);
   });

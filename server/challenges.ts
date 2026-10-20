@@ -8,18 +8,19 @@ import { obj } from './workoutSchema.js';
 
 interface ParticipationRow { id: string; user_id: string; challenge_id: string; snapshot_json: string; joined_at: string; completed_at: string | null }
 const count = (db: Database.Database, id: string) => (db.prepare('SELECT COUNT(*) AS n FROM challenge_events WHERE participation_id=? AND eligible=1').get(id) as { n: number }).n;
-export function challengeView(db: Database.Database, definition: ChallengeDefinition, row: ParticipationRow | undefined, now: string): ChallengeView {
+export function challengeView(db: Database.Database, definition: ChallengeDefinition, row: ParticipationRow | undefined, now: string, viewerId: string | null = row?.user_id ?? null): ChallengeView {
   if (row) definition = JSON.parse(row.snapshot_json) as ChallengeDefinition;
   return { definition, participation: row ? { id: row.id, joinedAt: row.joined_at, completedAt: row.completed_at, progress: count(db, row.id) } : null,
     state: row?.completed_at ? 'completed' : now < definition.startsAt ? 'upcoming' : now >= definition.endsAt ? 'expired' : 'active',
-    participantCount: (db.prepare('SELECT COUNT(*) AS n FROM challenge_participations WHERE challenge_id=? AND definition_version=?').get(definition.id, definition.version) as { n: number }).n };
+    participantCount: (db.prepare(`SELECT COUNT(*) AS n FROM challenge_participations p WHERE challenge_id=? AND definition_version=?
+      AND EXISTS(SELECT 1 FROM demo_users d WHERE d.user_id=p.user_id)=EXISTS(SELECT 1 FROM demo_users d WHERE d.user_id=?)`).get(definition.id, definition.version, viewerId) as { n: number }).n };
 }
 export function listChallenges(db: Database.Database, userId: string | null, now: string): ChallengeView[] {
   const rows = db.prepare('SELECT d.definition_json FROM challenge_definitions d WHERE version=(SELECT MAX(version) FROM challenge_definitions WHERE id=d.id) ORDER BY d.id').all() as { definition_json: string }[];
-  return rows.map(r => {
+  return rows.filter(r => Boolean((JSON.parse(r.definition_json) as ChallengeDefinition).isDemo) === !!db.prepare('SELECT 1 FROM demo_users WHERE user_id=?').get(userId)).map(r => {
     const definition = JSON.parse(r.definition_json) as ChallengeDefinition;
     const participation = db.prepare('SELECT * FROM challenge_participations WHERE user_id=? AND challenge_id=?').get(userId, definition.id) as ParticipationRow | undefined;
-    return challengeView(db, definition, participation, now);
+    return challengeView(db, definition, participation, now, userId);
   });
 }
 export function activeChallenges(db: Database.Database, userId: string, now: string) {
@@ -74,16 +75,20 @@ export function registerChallenges(app: FastifyInstance, db: Database.Database,
   });
   app.get<{ Params: { id: string } }>('/api/challenges/:id', { schema: { params, querystring: empty } }, async req => {
     const user = optionalUser(req), definition = current(req.params.id), now = new Date().toISOString();
+    if (Boolean(definition.isDemo) !== !!db.prepare('SELECT 1 FROM demo_users WHERE user_id=?').get(user?.id ?? null)) fail(404, 'NOT_FOUND', 'Испытание недоступно в этом режиме.');
     const participation = db.prepare('SELECT * FROM challenge_participations WHERE user_id=? AND challenge_id=?').get(user?.id ?? null, definition.id) as ParticipationRow | undefined;
-    const view = challengeView(db, definition, participation, now);
+    const view = challengeView(db, definition, participation, now, user?.id ?? null);
     const participants = db.prepare(`SELECT u.nickname,u.avatar,(SELECT COUNT(*) FROM challenge_events e WHERE e.participation_id=p.id AND e.eligible=1) AS progress
-      FROM challenge_participations p JOIN users u ON u.id=p.user_id WHERE p.challenge_id=? AND p.definition_version=? ORDER BY p.joined_at,p.id LIMIT 50`).all(definition.id, view.definition.version) as ChallengeDetail['participants'];
+      FROM challenge_participations p JOIN users u ON u.id=p.user_id WHERE p.challenge_id=? AND p.definition_version=?
+      AND EXISTS(SELECT 1 FROM demo_users d WHERE d.user_id=u.id)=EXISTS(SELECT 1 FROM demo_users d WHERE d.user_id=?)
+      ORDER BY p.joined_at,p.id LIMIT 50`).all(definition.id, view.definition.version, user?.id ?? null) as ChallengeDetail['participants'];
     return { serverNow: now, challenge: { ...view, participants } };
   });
   app.post<{ Params: { id: string }; Body: { version: number } }>('/api/challenges/:id/join', { schema: { params, querystring: empty, body: obj({ version: { type: 'integer', minimum: 1 } }) } }, async (req, reply) => {
     const user = requireUser(req);
     const result = db.transaction(() => {
       const definition = current(req.params.id), now = new Date().toISOString();
+      if (Boolean(definition.isDemo) !== !!db.prepare('SELECT 1 FROM demo_users WHERE user_id=?').get(user.id)) fail(404, 'NOT_FOUND', 'Испытание недоступно в этом режиме.');
       const previous = db.prepare('SELECT * FROM challenge_participations WHERE user_id=? AND challenge_id=?').get(user.id, definition.id) as ParticipationRow | undefined;
       if (previous) return { existing: true, challenge: challengeView(db, definition, previous, now) };
       if (definition.version !== req.body.version) fail(409, 'CHALLENGE_CHANGED', 'Условия обновились. Открой испытание заново.');

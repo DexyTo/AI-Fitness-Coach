@@ -16,12 +16,13 @@ import { ProgramEditor } from './programs/ProgramEditor';
 import { OverviewView } from './account/ProgressionViews';
 import { ChallengesPage, ChallengeDetails } from './challenges/ChallengeViews';
 import { DuelDetails, DuelInvite, DuelsPage, NewDuel } from './duels/DuelViews';
+import { LeaderboardPage, PublicParticipantPage } from './leaderboard/LeaderboardViews';
 
 export default function App() {
   const { user } = useAccount();
   const location = useLocation();
   const routerNavigate = useNavigate();
-  const { exercise, mode } = readSelection(location.search);
+  const { exercise, mode } = readSelection(['/', '/training', '/history'].includes(location.pathname) ? location.search : '');
   const search = selectionSearch({ exercise, mode });
   const navigate = (next: 'home' | 'training' | 'history', nextMode = mode) => {
     void routerNavigate({ pathname: next === 'home' ? '/' : `/${next}`, search: selectionSearch({ exercise, mode: nextMode }) });
@@ -44,16 +45,20 @@ export default function App() {
         <NavLink end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to={{ pathname: '/', search }}>Тренировки</NavLink>
         <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to='/programs'>Программы</NavLink>
         <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to='/competitions'>Соревнования</NavLink>
+        <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to='/leaderboard'>Рейтинг</NavLink>
         <NavLink className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} to={{ pathname: '/history', search }}><Icon name='history' />История</NavLink>
       </nav>
       <Link className='account-nav' to={user ? '/profile' : '/login'}>{user ? <><Avatar name={user.avatar} /><span>{user.nickname}</span></> : <><Icon name='shield' /><span>Войти</span></>}</Link>
     </header>
+    {user?.isDemo && <aside className='demo-session' role='note'><strong>Учебный аккаунт</strong> · Вымышленные результаты для показа платформы. <Link to='/leaderboard?mode=demo'>Учебный рейтинг</Link></aside>}
     <div id='main-content' tabIndex={-1}>
     <Routes>
     <Route path='/login' element={<AuthView key='login' />} />
     <Route path='/register' element={<AuthView key='register' register />} />
     <Route path='/profile' element={<ProfileView key={user?.id} />} />
     <Route path='/overview' element={<OverviewView key={user?.id} />} />
+    <Route path='/leaderboard' element={<LeaderboardPage key={user?.id}/>} />
+    <Route path='/participants/:id' element={<PublicParticipantPage key={location.pathname}/>} />
     <Route path='/competitions' element={<ChallengesPage key={user?.id}/>} />
     <Route path='/competitions/duels' element={<DuelsPage key={user?.id}/>} />
     <Route path='/competitions/duels/new' element={<NewDuel key={user?.id}/>} />
