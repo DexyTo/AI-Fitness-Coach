@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProgramPlan } from '../../shared/program';
-import { matchesProgram, programExercises } from './catalog';
+import { matchesProgram, programCover, programExercises } from './catalog';
+import type { ExerciseType } from '../exercises/types';
 
 const plan: ProgramPlan = {
   schemaVersion: 1, id: 'mixed', version: 1, origin: 'catalog', ownerId: null,
@@ -13,6 +14,18 @@ const plan: ProgramPlan = {
 };
 
 describe('program discovery', () => {
+  it('chooses covers from the whole plan, including reordered and personal plans', () => {
+    const withExercises = (...exercises: ExerciseType[]) => ({ ...plan, origin: 'personal' as const,
+      steps: exercises.map((exercise, i) => ({ ...plan.steps[0], id: String(i), exercise })),
+    });
+    expect(programCover(plan)).toBe('floor');
+    expect(programCover(withExercises('squat', 'glute_bridge'))).toBe('bodyweight');
+    expect(programCover(withExercises('glute_bridge', 'squat'))).toBe('bodyweight');
+    expect(programCover(withExercises('squat', 'overhead_press'))).toBe('dumbbells');
+    expect(programCover(withExercises('overhead_press', 'squat'))).toBe('dumbbells');
+    expect(programCover(withExercises('forearm_plank', 'wall_sit', 'front_hold'))).toBe('holds');
+    expect(programCover(withExercises())).toBe('bodyweight');
+  });
   it('finds exercises inside mixed plans by label and exercise filter', () => {
     expect(matchesProgram(plan, '  ПЛАНКА ', 'all', 'all')).toBe(true);
     expect(matchesProgram(plan, '', 'forearm_plank', 'all')).toBe(true);
