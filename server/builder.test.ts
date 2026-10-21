@@ -26,7 +26,7 @@ describe('personal program builder',()=>{
     for(const name of ['001_foundation.sql','002_accounts.sql','003_programs.sql'])copyFileSync(join(projectRoot,'server/migrations',name),join(oldMigrations,name));
     const path=join(directory,'old.sqlite'),old=openDatabase(path);
     migrate(old,oldMigrations);old.prepare("UPDATE programs SET version=3,title='Свой текст' WHERE id='squat-pushup'").run();
-    expect(migrate(old)).toEqual(['004_builder.sql','005_progression.sql','006_challenges.sql','007_duels.sql','008_leaderboard_demo.sql','009_exercise_units.sql']);expect(migrate(old)).toEqual([]);
+    expect(migrate(old)).toEqual(['004_builder.sql','005_progression.sql','006_challenges.sql','007_duels.sql','008_leaderboard_demo.sql','009_exercise_units.sql','010_program_catalog.sql']);expect(migrate(old)).toEqual([]);
     const snapshot=JSON.parse((old.prepare("SELECT snapshot_json FROM program_versions WHERE program_id='squat-pushup'").get() as {snapshot_json:string}).snapshot_json) as ProgramPlan;
     expect(snapshot).toMatchObject({version:3,title:'Свой текст',origin:'catalog',ownerId:null});expect(snapshot.steps.map(s=>s.exercise)).toEqual(['squat','pushup']);
     expect(()=>old.prepare("UPDATE program_versions SET version=4 WHERE program_id='squat-pushup'").run()).toThrow(/Immutable/);
@@ -41,7 +41,7 @@ describe('personal program builder',()=>{
     expect(plan).toMatchObject({...draft,origin:'personal',ownerId:alice.id,version:1});
     expect((await req('GET',url,undefined,alice.cookie)).json().program).toEqual(plan);
     for(const cookie of [undefined,bob.cookie])expect((await req('GET',url,undefined,cookie)).statusCode).toBe(404);
-    expect((await req('GET','/api/programs',undefined,bob.cookie)).json().programs).toHaveLength(7);
+    expect((await req('GET','/api/programs',undefined,bob.cookie)).json().programs).toHaveLength(15);
     expect((await req('GET','/api/me/programs',undefined,alice.cookie)).json().programs).toEqual([plan]);
     for(const [method,path,body] of [['PUT',url,{...draft,version:1}],['DELETE',url,undefined],['POST',`${url}/copy`,{version:1}],['PUT',`${url}/favorite`,undefined]] as const)expect((await req(method,path,body,bob.cookie)).statusCode).toBe(404);
     expect((await req('GET','/api/me/programs',undefined,bob.cookie,alice.id)).statusCode).toBe(409);

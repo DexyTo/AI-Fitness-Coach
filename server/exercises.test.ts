@@ -110,8 +110,8 @@ describe('new exercise storage and reward compatibility (synthetic camera fixtur
     expect(isWorkoutRecord(record)).toBe(true);
     const raw=JSON.stringify(record);
     db.prepare("INSERT INTO workout_results (id,user_id,source,source_version,original_id,record_json,created_at) VALUES ('old-history','alice','historical_import',1,?,?,?)").run(record.id,raw,record.date);
-    expect(migrate(db)).toEqual(['009_exercise_units.sql']);expect(migrate(db)).toEqual([]);
-    expect(db.prepare('SELECT * FROM program_versions').all()).toEqual(versions);expect(db.prepare('SELECT COUNT(*) n FROM program_favorites').get()).toEqual({n:1});
+    expect(migrate(db)).toEqual(['009_exercise_units.sql','010_program_catalog.sql']);expect(migrate(db)).toEqual([]);
+    for (const version of versions as {program_id:string;version:number}[]) expect(db.prepare('SELECT * FROM program_versions WHERE program_id=? AND version=?').get(version.program_id,version.version)).toEqual(version);expect(db.prepare('SELECT COUNT(*) n FROM program_favorites').get()).toEqual({n:1});
     expect(db.prepare("SELECT record_json FROM workout_results WHERE id='old-history'").get()).toEqual({record_json:raw});
     const before=db.prepare('SELECT * FROM program_steps').all();seedChallenges(db,new Date('2026-10-21T12:00:00Z'));const count=db.prepare('SELECT COUNT(*) n FROM challenge_definitions').get();seedChallenges(db,new Date('2026-10-21T12:00:00Z'));expect(db.prepare('SELECT COUNT(*) n FROM challenge_definitions').get()).toEqual(count);expect(db.prepare('SELECT * FROM program_steps').all()).toEqual(before);
     expect(parseHistory(JSON.stringify({schemaVersion:1,records:[record]}))).toEqual([record]);

@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { buildApp } from './app.js';
 import { openDatabase, migrate } from './database.js';
 import { TrainingController } from '../src/training/session';
-import { validProgramRecord, type ProgramPlan, type ProgramRecord, type ProgramSnapshot } from '../shared/program';
+import { validPlan, validProgramRecord, type ProgramPlan, type ProgramRecord, type ProgramSnapshot } from '../shared/program';
+import { exerciseIds } from '../src/exercises/types';
 const cleanups:(()=>unknown|Promise<unknown>)[]=[];
 afterEach(async()=>{for(const cleanup of cleanups.splice(0).reverse())await cleanup();});
 function setup() {
@@ -20,12 +21,34 @@ function result(snapshot:ProgramSnapshot,id:string,date:string):ProgramRecord {
     steps:snapshot.program.steps.map((s,i)=>{const c=new TrainingController(s.exercise,snapshot.mode,s.goal,snapshot.conditions,0,new Date(Date.parse(date)+i*2000).toISOString(),`${id}:${i}`);for(let j=0;j<s.goal.sets;j++){if(j)c.resume(j*10);c.endSet(j*10+1,j*10+1);}return c.finish(1000,1000);})};
 }
 describe('program catalog and immutable results',()=>{
-  it('seeds seven executable templates once and preserves edited data across migrations/reopen',async()=>{
+  it('seeds executable templates for every exercise once and preserves edited data across migrations/reopen',async()=>{
     const {req,db,path,app}=setup();const data=(await req('GET','/api/programs')).json().programs as ProgramPlan[];
-    expect(data).toHaveLength(7);expect(data.every(p=>p.steps.length&&p.steps.every(s=>['squat','pushup'].includes(s.exercise)))).toBe(true);
+    expect(data).toHaveLength(15);expect(data.every(validPlan)).toBe(true);
+    expect(new Set(data.flatMap(p=>p.steps.map(s=>s.exercise)))).toEqual(new Set(exerciseIds));
+    for(const plan of data) {
+      const row=db.prepare('SELECT snapshot_json FROM program_versions WHERE program_id=? AND version=?').get(plan.id,plan.version) as {snapshot_json:string};
+      expect(JSON.parse(row.snapshot_json)).toEqual(plan);
+      expect((await req('GET',`/api/programs/${plan.id}`)).json().program).toEqual(plan);
+    }
     expect((await req('GET','/api/programs/missing')).statusCode).toBe(404);
     db.prepare("UPDATE programs SET title='kept' WHERE id=?").run(data[0].id);expect(migrate(db)).toEqual([]);
     await app.close();const reopened=openDatabase(path);cleanups.push(()=>reopened.close());expect(migrate(reopened)).toEqual([]);expect(reopened.prepare('SELECT title FROM programs WHERE id=?').get(data[0].id)).toEqual({title:'kept'});
+  });
+  it('starts new templates with seconds, seated variants and both lunge sides intact',async()=>{
+    const {req,register,db}=setup(),cookie=await register('alice');
+    for(const id of ['lower-body','floor-workout','dumbbell-upper','standing-dumbbells','seated-press','hold-circuit','lunge-bridge','full-body-start']) {
+      const plan=(await req('GET',`/api/programs/${id}`)).json().program as ProgramPlan;
+      const begin=await req('POST','/api/runs',{kind:'program',program:plan,mode:'demo',conditions:'',requestId:id},cookie);
+      expect(begin.statusCode,begin.body).toBe(201);
+      const row=db.prepare('SELECT snapshot_json FROM workout_runs WHERE id=?').get(begin.json().id) as {snapshot_json:string};
+      expect(JSON.parse(row.snapshot_json).program).toEqual(plan);
+    }
+    const lower=(await req('GET','/api/programs/lower-body')).json().program as ProgramPlan;
+    expect(lower.steps.filter(s=>s.exercise==='reverse_lunge').map(s=>s.goal.options?.side)).toEqual(['left','right']);
+    const holds=(await req('GET','/api/programs/hold-circuit')).json().program as ProgramPlan;
+    expect(holds.steps.every(s=>s.goal.unit==='seconds'&&s.goal.reps===undefined)).toBe(true);
+    const seated=(await req('GET','/api/programs/seated-press')).json().program as ProgramPlan;
+    expect(seated.steps[0].goal.options?.variant).toBe('seated');
   });
   it('isolates owners, freezes adjusted plans, validates order/status/aggregates and saves exactly once',async()=>{
     const {req,db,register,app,path}=setup(),alice=await register('alice'),bob=await register('bob');
