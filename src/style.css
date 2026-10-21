@@ -145,7 +145,27 @@
   .profile-stats { gap: 14px; }.profile-stats strong { font-size: 36px; }
   .profile-grid { margin-top: 24px; gap: 14px; }.import-panel { padding-inline: 16px; }
 }
-:root { font-family: 'Manrope', 'Segoe UI', Arial, sans-serif; color: #f0f0e8; background: #141711; font-synthesis: none; color-scheme: dark; --bg: #141711; --surface: #1d2119; --raised: #252b20; --border: #373d30; --text: #f0f0e8; --muted: #adb3a3; --accent: #d0ef85; }
+:root {
+  color-scheme: light;
+  --bg: #f7f9fc;
+  --surface: #fff;
+  --raised: #f0f3f8;
+  --border: #e7ebf2;
+  --text: #101426;
+  --muted: #687286;
+  --accent: #1245ff;
+  --lime: #cdff00;
+  --blue: #1245ff;
+  --success: #16b54b;
+  --danger: #ed444e;
+  --radius: 16px;
+  --shadow: 0 4px 22px #1f355608;
+  --space: 24px;
+  --sidebar-width: 218px;
+  color: var(--text);
+  background: var(--bg);
+  font-family: 'Inter', 'Manrope', 'Segoe UI', Arial, sans-serif;
+}
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 28px; }
 body { margin: 0; min-width: 0; font-size: 15px; line-height: 1.6; }

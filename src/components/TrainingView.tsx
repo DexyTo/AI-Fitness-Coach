@@ -1,4 +1,6 @@
-import { ExerciseGuide, ExerciseOptionsFields, HoldSummary, SideSummary } from './ExerciseSetup';
+import { ResultOverview, ResultLinks } from './ResultOverview';
+import { readPreferences } from './PreferencesView';
+import { ExerciseGuide, ExerciseOptionsFields, SideSummary } from './ExerciseSetup';
 import { exerciseRegistry, isHold, isLegacy, optionsFor, criterionName } from '../exercises/registry';
 import { goalValue, resultValue, validExerciseGoal, type TrainingGoal as Goal } from '../../shared/workout';
 import { useEffect, useMemo, useState } from 'react';
@@ -7,7 +9,7 @@ import { AccountPersistence, type TrainingPersistence } from '../account/api';
 import type { TrainingGoal } from '../training/session';
 import type { ExerciseType, InputMode, FeedbackCode } from '../exercises/types';
 import { criterionLabels, labels } from '../exercises/types';
-import { criterionTotals, nextTask } from '../exercises/coaching';
+import { criterionTotals } from '../exercises/coaching';
 import { AttemptReport } from './AttemptReport';
 import { useTraining } from '../hooks/useTraining';
 import { useVoiceFeedback } from '../hooks/useVoiceFeedback';
@@ -38,8 +40,9 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
   const accountPersistence = useMemo(() => user ? new AccountPersistence(user.id) : undefined, [user?.id]);
   const persistence = programStep?.persistence ?? accountPersistence;
   const [videoUrl, setVideoUrl] = useState('');
+  const [attemptedStart, setAttemptedStart] = useState(false);
   const [demoScenario,setDemoScenario]=useState<DemoScenario>('normal');
-  const [goalFields, setGoalFields] = useState(programStep ? {sets:String(programStep.goal.sets),reps:String(goalValue(programStep.goal)),restSeconds:String(programStep.goal.restSeconds)} : { sets: '', reps: '', restSeconds: '' });
+  const [goalFields, setGoalFields] = useState(programStep ? {sets:String(programStep.goal.sets),reps:String(goalValue(programStep.goal)),restSeconds:String(programStep.goal.restSeconds)} : readPreferences(user?.id));
   const [conditions, setConditions] = useState(programStep?.conditions ?? '');
   const [options,setOptions]=useState(()=>optionsFor(exercise,programStep?.goal.options));
   const hold=isHold(exercise), def=exerciseRegistry[exercise];
@@ -69,6 +72,9 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
     restart,
     phase, setNumber, restSeconds, pause, resume, endSet, saveError, saving, retrySave, reward,
   } = useTraining({ exercise, mode, videoUrl, goal, conditions, persistence, demoScenario });
+  useEffect(() => { if (started || session) window.scrollTo({ top: 0, behavior: 'smooth' }); }, [started, session]);
+  useEffect(() => { if (started) setAttemptedStart(false); }, [started]);
+  const startupFailed = attemptedStart && !started && !starting;
   const {
     enabled: voiceEnabled,
     setEnabled: setVoiceEnabled,
@@ -94,35 +100,10 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
           {labels[exercise]} · {readable(session.duration)} ·{' '}
           {mode === 'demo' ? 'Демо' : mode === 'video' ? 'Видеофайл' : 'Камера'}
         </p>
-        {hold?<HoldSummary result={result} exercise={exercise}/>:<div className='result-grid'>
-          <div className='result-tile'>
-            <span>Полные повторы</span>
-            <strong>{result.reps}</strong>
-          </div>
-          <div className='result-tile'>
-            <span>Неполные попытки</span>
-            <strong>{result.incomplete}</strong>
-          </div>
-          <div className='result-tile'>
-            <span>С замечаниями</span>
-            <strong>{result.withErrors}</strong>
-          </div>
-          <div className='result-tile'>
-            <span>Не удалось оценить</span>
-            <strong>{result.unassessed}</strong>
-          </div>
-        </div>}
+        <ResultOverview record={session} />
+        <ResultLinks repeat={restart} disabled={saving || !!saveError} />
         <SideSummary result={result}/>
         {!saving && !saveError && <RewardNotice reward={reward} guest={!persistence}/>}
-        {!hold&&<div className='recommend'>
-          <span className='recommend-symbol'>✦</span>
-          <div>
-            <b>Одна задача на следующий подход</b>
-            <p>{nextTask(result, exercise)}</p>
-            <p>Без замечаний по проверенным критериям: {result.withoutFindings} полных повторов.</p>
-          </div>
-        </div>
-        }
         {!hold&&<details className='criterion-summary' aria-label='Результаты по критериям'>
           <summary>Что удалось проверить</summary>
           <p>Предварительные критерии. Это результаты наблюдений, а не процент техники.</p>
@@ -157,19 +138,22 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
     );
   }
   return (
-    <main className='workout page-enter'>
+    <main className={`workout page-enter ${started ? 'workout-live' : 'workout-setup'}`}>
+      {!started && <div className='preparation-steps' aria-label='Этапы подготовки'><span className='done'>1 · Упражнение</span><i /><span className='current'>2 · Камера и план</span><i /><span>3 · Движение</span></div>}
       <div className='workout-heading'>
         <div>
           <span className='eyebrow'>
             ТРЕНИРОВОЧНАЯ СЕССИЯ /{' '}
             {mode === 'demo' ? 'ДЕМО' : mode === 'video' ? 'ВИДЕО' : 'КАМЕРА'}
+            {started && user?.isDemo ? ' · УЧЕБНЫЙ АККАУНТ' : ''}
           </span>
           <h1>
             {labels[exercise]}
             <span className='accent'>.</span>
           </h1>
+          {started && <span className='live-plan'>Подход {setNumber} / {goal.sets} · цель {goalValue(goal)} {hold ? 'с' : 'повт.'}</span>}
           <p className='muted'>
-            {started ? 'Сосредоточься на движении. Подсказки — рядом.' : 'Задай цель и подготовься к первому подходу.'}
+            {started ? 'Сосредоточься на движении. Подсказки — рядом.' : 'Настрой камеру и выбери цель подхода.'}
           </p>
         </div>
         <div className='clock'>
@@ -200,6 +184,8 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
             </span>
           </div>
           <div className={`stage ${mode === 'demo' ? 'stage-demo' : ''}`}>
+            {started && <div className='video-hud'><div><strong>{hold ? resultValue(analysis.result).toFixed(1) : analysis.result.reps}</strong><span>{hold ? 'Секунды' : 'Повторения'}</span></div><div><strong>{readable(seconds)}</strong><span>Время</span></div><span className={`tracking-pill ${analysis.observation.status === 'ready' && accepting ? 'is-ready' : ''}`}>{!accepting ? phaseLabels[phase] : analysis.observation.status === 'ready' ? 'Точки видны' : 'Проверь кадр'}</span></div>}
+            {started && !accepting && <div className='pause-overlay' role='status'><Icon name={phase === 'rest' ? 'clock' : 'play'} /><h2>{phaseLabels[phase]}</h2><p>{phase === 'rest' ? `Следующий подход через ${restSeconds} с` : 'Нажми продолжить, когда будешь готов(а).'}</p></div>}
             <video
               ref={videoRef}
               muted
@@ -222,20 +208,21 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
               ref={canvasRef}
               aria-hidden='true'
             />
+            {started && accepting && <div className='live-cue' role='status'><Icon name='volume' /><span>{cue?.message ?? 'Удерживай исходную позицию. Проверяем наблюдение…'}</span></div>}
             {!started && (
               <div className='start-overlay'>
                 <div className='start-icon'>
                   <Icon name={mode === 'camera' ? 'camera' : mode === 'video' ? 'video' : 'play'} />
                 </div>
                 <h2>
-                  {mode === 'camera'
+                  {startupFailed ? 'Не удалось начать' : mode === 'camera'
                     ? 'Твоё место для движения'
                     : mode === 'video'
                       ? 'Проверьте своё видео'
                       : 'Познакомься с тренировкой'}
                 </h2>
-                <p>
-                  {mode === 'camera'
+                <p role={startupFailed ? 'alert' : undefined}>
+                  {startupFailed ? status : mode === 'camera'
                     ? 'Разреши доступ к камере. Видео обрабатывается только на твоём устройстве.'
                     : mode === 'video'
                       ? 'Загрузите запись упражнения: анализ пройдёт через ту же модель, что и камера.'
@@ -254,10 +241,10 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
                 {mode === 'video' && videoUrl && <small>Видео выбрано ✓</small>}
                 <button
                   className='button button-primary'
-                  onClick={() => void start()}
+                  onClick={() => { setAttemptedStart(true); void start(); }}
                   disabled={starting || !goalIsValid || (mode === 'video' && !videoUrl)}
                 >
-                  {starting ? 'Подготовка…' : mode === 'camera'
+                  {starting ? 'Подготовка…' : startupFailed ? 'Попробовать снова' : mode === 'camera'
                     ? 'Разрешить доступ к камере'
                     : mode === 'video'
                       ? 'Запустить анализ'
@@ -268,6 +255,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
               </div>
             )}
           </div>
+          {started && <div className='camera-actions' aria-label='Управление у видео'><button className='camera-sound' aria-label={voiceEnabled ? 'Выключить голос' : 'Включить голос'} aria-pressed={voiceEnabled} disabled={!voiceSupported} onClick={() => setVoiceEnabled(v => !v)}><Icon name='volume' /></button>{accepting ? <button className='camera-pause' onClick={pause} aria-label='Поставить на паузу'>Ⅱ</button> : (phase === 'paused' || phase === 'next') ? <button className='camera-pause' onClick={() => void resume()} aria-label='Продолжить тренировку'><Icon name='play' /></button> : <span className='camera-rest'>{restSeconds} с</span>}<button className='camera-finish' onClick={finish} aria-label={programStep ? 'Прервать программу у видео' : 'Завершить тренировку у видео'}><span>■</span><small>{programStep ? 'Прервать' : 'Завершить'}</small></button></div>}
           <div className='camera-bottom'>
             <span className='status-dot' aria-hidden='true' />
             <span role='status'>{status}</span>

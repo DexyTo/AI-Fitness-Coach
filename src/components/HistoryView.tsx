@@ -1,3 +1,7 @@
+import { inHistoryRange, type HistoryRange } from './workoutAnalytics';
+import { loadPrograms } from '../programs/history';
+import { HistoryAnalytics, ExerciseFilter, HistoryDateFilter } from './HistoryAnalytics';
+import { ExerciseVisual } from './ExerciseVisual';
 import { HoldSummary, SideSummary } from './ExerciseSetup';
 import { goalLabel, resultValue } from '../../shared/workout';
 import { isLegacy, criterionName } from '../exercises/registry';
@@ -42,6 +46,8 @@ export function WorkoutDetails({ record }: { record: WorkoutRecord }) {
 }
 
 export function HistoryView({ onHome }: { onHome: () => void }) {
+  const [dateRange, setDateRange] = useState<HistoryRange>('all');
+  const [exerciseFilter, setExerciseFilter] = useState('all');
   const [store] = useState(() => new HistoryStore());
   const [history, setHistory] = useState(() => store.load());
   const [error, setError] = useState<string | null>(null);
@@ -58,11 +64,14 @@ export function HistoryView({ onHome }: { onHome: () => void }) {
     if (!all.some(previous => comparableHistory([previous], r).length)) all.push(r);
     return all;
   }, []);
+  const visibleRecords = [...history.records].reverse().filter(record => inHistoryRange(record.date, dateRange) && (exerciseFilter === 'all' || record.exercise === exerciseFilter));
   return <main className='history-page page-enter'>
-    <div className='page-heading'><div><span className='eyebrow'>ТВОЙ РИТМ</span><h1>История движений<span className='accent'>.</span></h1><p className='muted'>Каждый подход — часть твоего пути.</p></div><button className='button button-primary' onClick={onHome}>К тренировке <Icon name='arrow' /></button></div>
+    <div className='page-heading'><div><span className='eyebrow'>ТВОЙ РИТМ</span><h1>История тренировок<span className='accent'>.</span></h1><p className='muted'>Каждый подход — часть твоего пути.</p></div><button className='button button-primary' onClick={onHome}>К тренировке <Icon name='arrow' /></button></div>
     <div className='local-note'><Icon name='shield' /><p>Сохранено только в этом браузере. Видео не сохраняется.<span> При очистке данных браузера история удалится. Экспортируй результаты, чтобы оставить копию.</span></p></div>
     {(history.error || error) && <p role='alert' className='storage-error'>{error || history.error}</p>}
-    <div className='history-toolbar'><h2>Одиночные тренировки <span className='count-badge'>{history.records.length}</span></h2><div className='history-actions'>
+    {!history.error && <HistoryAnalytics records={[...history.records, ...loadPrograms().records]} />}
+    <ExerciseFilter value={exerciseFilter} onChange={setExerciseFilter} />
+    <div className='history-toolbar'><h2>Одиночные тренировки <span className='count-badge'>{visibleRecords.length}</span></h2><HistoryDateFilter value={dateRange} onChange={setDateRange} /><div className='history-actions'>
       <button className='button button-ghost' onClick={refresh}>Обновить</button>
       <button className='button button-ghost' disabled={!history.records.length} onClick={() => downloadJson({ schemaVersion: 1, records: history.records }, 'playfit-history.json')}>Экспорт JSON</button>
       {history.error && history.raw !== null && <button className='button' onClick={() => downloadJson(history.raw, 'playfit-history-original.json', true)}>Сохранить исходные данные</button>}
@@ -70,14 +79,15 @@ export function HistoryView({ onHome }: { onHome: () => void }) {
     </div></div>
     {confirm === 'all' && <div role='alert' className='delete-confirm'><p>Удалить все одиночные тренировки гостя? Восстановить их не получится. Сначала можно сохранить JSON. Программы находятся в отдельном разделе ниже.</p><button className='button button-danger' onClick={clear}>Удалить одиночные тренировки</button><button className='button' onClick={() => setConfirm(null)}>Отмена</button></div>}
     {!history.records.length && !history.error && <section className='empty-state'><span className='empty-icon'><Icon name='history' /></span><span className='eyebrow'>НОВАЯ ТОЧКА ОТСЧЁТА</span><h2>Первый подход ещё впереди</h2><p>Заверши тренировку — здесь появятся<br />твои повторы, подходы и подсказки.</p><button className='button button-primary' onClick={onHome}>Выбрать тренировку <Icon name='arrow' /></button></section>}
-    {[...history.records].reverse().map(record => <article className='history-record' key={record.id}>
-      <div className='record-heading'><span className='exercise-glyph'><Icon name={record.exercise} /></span><div><span className='record-date'>{new Date(record.date).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span><h3>{labels[record.exercise]}</h3></div><span className={`mode-badge ${record.mode === 'demo' ? 'demo' : ''}`}>{modeLabels[record.mode]}</span></div>
+    {history.records.length > 0 && visibleRecords.length === 0 && <p className='filter-empty' role='status'>Для выбранных фильтров записей пока нет.</p>}
+    {visibleRecords.map(record => <article className='history-record' key={record.id}>
+      <div className='record-heading'><ExerciseVisual exercise={record.exercise} /><div><span className='record-date'>{new Date(record.date).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span><h3>{labels[record.exercise]}</h3></div><span className={`mode-badge ${record.mode === 'demo' ? 'demo' : ''}`}>{modeLabels[record.mode]}</span></div>
       <WorkoutMetrics record={record} />
       <details><summary>Подробности тренировки</summary><WorkoutDetails record={record} /></details>
       <div className='record-footer'><span>{durationLabel(record.duration)} · цель {record.goal.sets} × {goalLabel(record.goal)}</span><div className='history-actions'><button className='button button-ghost' onClick={() => downloadJson({ schemaVersion: 1, records: [record] }, 'playfit-workout.json')}>Экспорт</button><button className='button button-ghost danger-text' onClick={() => setConfirm(record.id)}>Удалить…</button></div></div>
       {confirm === record.id && <div role='alert' className='delete-confirm'><p>Удалить эту тренировку без возможности восстановления?</p><button className='button button-danger' onClick={() => remove(record.id)}>Удалить запись</button><button className='button' onClick={() => setConfirm(null)}>Отмена</button></div>}
     </article>)}
-    <GuestProgramHistory />
+    <GuestProgramHistory exerciseFilter={exerciseFilter} dateRange={dateRange} onChange={refresh} />
     {groups.length > 0 && <details className='comparison-section'><summary>Сравнить тренировки <span>В одинаковых условиях</span></summary>
       <p>Сравниваются одинаковые упражнения, цели, условия и параметры анализа. Камера и видео разделены. Демо не входит в личный прогресс.</p>
       {groups.map(selected => {

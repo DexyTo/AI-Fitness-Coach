@@ -1,9 +1,17 @@
 import type { ExerciseType } from '../exercises/types';
 import type { ReactNode } from 'react';
 
-type IconName = ExerciseType | 'arrow' | 'camera' | 'play' | 'video' | 'squat' | 'pushup' | 'check' | 'history' | 'shield' | 'activity' | 'star' | 'copy' | 'up' | 'down' | 'trash' | 'flag';
+type IconName = ExerciseType | 'home' | 'search' | 'bell' | 'user' | 'settings' | 'volume' | 'clock' | 'chevron' | 'arrow' | 'camera' | 'play' | 'video' | 'squat' | 'pushup' | 'check' | 'history' | 'shield' | 'activity' | 'star' | 'copy' | 'up' | 'down' | 'trash' | 'flag';
 
 const paths: Partial<Record<IconName, ReactNode>> = {
+  home: <><path d='m3 10 9-7 9 7v11h-6v-7H9v7H3Z'/></>,
+  search: <><circle cx='10.5' cy='10.5' r='6.5'/><path d='m16 16 5 5'/></>,
+  bell: <><path d='M5 17h14l-2-3V9a5 5 0 0 0-10 0v5ZM10 21h4'/></>,
+  user: <><circle cx='12' cy='7' r='4'/><path d='M4 21v-2a8 8 0 0 1 16 0v2Z'/></>,
+  settings: <><path d='M4 7h16M4 17h16'/><circle cx='9' cy='7' r='3' fill='var(--surface)'/><circle cx='15' cy='17' r='3' fill='var(--surface)'/></>,
+  volume: <><path d='M3 9v6h4l5 4V5L7 9ZM16 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14'/></>,
+  clock: <><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>,
+  chevron: <path d='m9 5 7 7-7 7'/>,
   flag: <path d='M5 21V3m0 1c5-4 9 4 14 0v10c-5 4-9-4-14 0'/>,
   star: <path d='m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z' />,
   copy: <><rect x='8' y='8' width='13' height='13' rx='2'/><path d='M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3'/></>,
