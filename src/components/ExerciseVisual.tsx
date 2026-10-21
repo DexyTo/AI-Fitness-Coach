@@ -9,7 +9,9 @@ export const muscleGroups: Record<ExerciseType, string> = {
 };
 export function ExerciseVisual({ exercise, className = '' }: { exercise: ExerciseType; className?: string }) {
   const photo = `/images/${exercise}.webp`;
-  return <span className={`exercise-visual visual-${exercise} exercise-photo ${className}`} style={{ '--exercise-photo': `url("${photo}")` } as CSSProperties}>
-    <img src={photo} alt={labels[exercise]} loading='lazy' />
+  // Match the local source photos so instructional views need no crop or filler.
+  const portrait = exercise === 'squat' || exercise === 'reverse_lunge';
+  return <span className={`exercise-visual visual-${exercise} ${className}`} style={{ '--exercise-aspect': portrait ? '2 / 3' : '3 / 2' } as CSSProperties}>
+    <img src={photo} alt={labels[exercise]} width={portrait ? 800 : 1200} height={portrait ? 1200 : 800} loading='lazy' />
   </span>;
 }
