@@ -22,7 +22,7 @@ const paths: Partial<Record<IconName, ReactNode>> = {
   camera: <><rect x='3' y='6' width='13' height='12' rx='3' /><path d='m16 10 5-3v10l-5-3' /></>,
   play: <><circle cx='12' cy='12' r='9' /><path d='m10 8 6 4-6 4Z' /></>,
   video: <><rect x='4' y='3' width='16' height='18' rx='3' /><path d='m10 9 5 3-5 3Z' /></>,
-  squat: <><circle cx='11' cy='4' r='2' /><path d='m11 8-2 6 7 2-2 5M9 14l-5 3 3 4M11 8l6 3h4' /></>,
+  squat: <g transform='rotate(-35 12 12)'><rect x='4' y='7' width='4' height='10' rx='1' /><rect x='16' y='7' width='4' height='10' rx='1' /><path d='M8 12h8M2 10v4m20-4v4' /></g>,
   pushup: <><circle cx='4' cy='8' r='2' /><path d='m7 10 8 3 6 5M8 10l-1 7H3M15 13l-3 5h9' /></>,
   check: <path d='m5 12 4 4L19 6' />,
   history: <><path d='M3 11a9 9 0 1 1 2 7M3 4v7h7M12 7v5l3 2' /></>,

@@ -1,4 +1,5 @@
 import type { ExerciseType } from '../exercises/types';
+import type { CSSProperties } from 'react';
 import { labels } from '../exercises/types';
 import { exercisePose } from '../pose/exerciseDemo';
 import { usesDumbbells } from '../exercises/registry';
@@ -9,8 +10,10 @@ export const muscleGroups: Record<ExerciseType, string> = {
   overhead_press: 'Плечи · Руки', front_hold: 'Плечи · Корпус', side_bend: 'Корпус', lateral_raise: 'Плечи · Руки',
 };
 export function ExerciseVisual({ exercise, className = '' }: { exercise: ExerciseType; className?: string }) {
-  return <span className={`exercise-visual visual-${exercise} ${className}`}>
-    {['squat', 'pushup', 'reverse_lunge', 'forearm_plank'].includes(exercise) ? <img src={`/images/${exercise}.webp`} alt={labels[exercise]} loading='lazy' /> : <ExerciseIllustration exercise={exercise} />}
+  const hasPhoto = ['squat', 'pushup', 'reverse_lunge', 'forearm_plank'].includes(exercise);
+  const photo = `/images/${exercise}.webp`;
+  return <span className={`exercise-visual visual-${exercise} ${hasPhoto ? 'exercise-photo' : ''} ${className}`} style={hasPhoto ? { '--exercise-photo': `url("${photo}")` } as CSSProperties : undefined}>
+    {hasPhoto ? <img src={photo} alt={labels[exercise]} loading='lazy' /> : <ExerciseIllustration exercise={exercise} />}
   </span>;
 }
 
