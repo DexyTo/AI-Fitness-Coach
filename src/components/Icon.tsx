@@ -1,7 +1,7 @@
 import type { ExerciseType } from '../exercises/types';
 import type { ReactNode } from 'react';
 
-type IconName = ExerciseType | 'home' | 'search' | 'bell' | 'user' | 'settings' | 'volume' | 'clock' | 'chevron' | 'arrow' | 'camera' | 'play' | 'video' | 'squat' | 'pushup' | 'check' | 'history' | 'shield' | 'activity' | 'star' | 'copy' | 'up' | 'down' | 'trash' | 'flag';
+type IconName = ExerciseType | 'home' | 'search' | 'bell' | 'user' | 'settings' | 'volume' | 'volume-off' | 'pause' | 'clock' | 'chevron' | 'arrow' | 'camera' | 'play' | 'video' | 'squat' | 'pushup' | 'check' | 'history' | 'shield' | 'activity' | 'star' | 'copy' | 'up' | 'down' | 'trash' | 'flag';
 
 const paths: Partial<Record<IconName, ReactNode>> = {
   home: <><path d='m3 10 9-7 9 7v11h-6v-7H9v7H3Z'/></>,
@@ -10,6 +10,8 @@ const paths: Partial<Record<IconName, ReactNode>> = {
   user: <><circle cx='12' cy='7' r='4'/><path d='M4 21v-2a8 8 0 0 1 16 0v2Z'/></>,
   settings: <><path d='M4 7h16M4 17h16'/><circle cx='9' cy='7' r='3' fill='var(--surface)'/><circle cx='15' cy='17' r='3' fill='var(--surface)'/></>,
   volume: <><path d='M3 9v6h4l5 4V5L7 9ZM16 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14'/></>,
+  'volume-off': <><path d='M3 9v6h4l5 4V5L7 9Z' /><path d='m16 9 6 6m0-6-6 6' /></>,
+  pause: <><rect x='6' y='5' width='4' height='14' rx='1' fill='currentColor' stroke='none' /><rect x='14' y='5' width='4' height='14' rx='1' fill='currentColor' stroke='none' /></>,
   clock: <><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>,
   chevron: <path d='m9 5 7 7-7 7'/>,
   flag: <path d='M5 21V3m0 1c5-4 9 4 14 0v10c-5 4-9-4-14 0'/>,

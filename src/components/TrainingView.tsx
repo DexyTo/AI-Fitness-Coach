@@ -79,7 +79,9 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
     enabled: voiceEnabled,
     setEnabled: setVoiceEnabled,
     supported: voiceSupported,
-  } = useVoiceFeedback(started && phase === 'active' && !session && analysis.state !== 'Оценка приостановлена', cue);
+    error: voiceError,
+    testSound,
+  } = useVoiceFeedback(started && phase === 'active' && !session && analysis.state !== 'Оценка приостановлена', cue, !!session || (started && phase !== 'active' && phase !== 'preparing'));
   const accepting = phase === 'active' || phase === 'preparing';
   const previousAttempt = analysis.result.attempts.at(-1);
   const onFile = (file?: File) => {
@@ -241,7 +243,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
                 {mode === 'video' && videoUrl && <small>Видео выбрано ✓</small>}
                 <button
                   className='button button-primary'
-                  onClick={() => { setAttemptedStart(true); void start(); }}
+                  onClick={() => { if (voiceEnabled) testSound(); setAttemptedStart(true); void start(); }}
                   disabled={starting || !goalIsValid || (mode === 'video' && !videoUrl)}
                 >
                   {starting ? 'Подготовка…' : startupFailed ? 'Попробовать снова' : mode === 'camera'
@@ -255,7 +257,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
               </div>
             )}
           </div>
-          {started && <div className='camera-actions' aria-label='Управление у видео'><button className='camera-sound' aria-label={voiceEnabled ? 'Выключить голос' : 'Включить голос'} aria-pressed={voiceEnabled} disabled={!voiceSupported} onClick={() => setVoiceEnabled(v => !v)}><Icon name='volume' /></button>{accepting ? <button className='camera-pause' onClick={pause} aria-label='Поставить на паузу'>Ⅱ</button> : (phase === 'paused' || phase === 'next') ? <button className='camera-pause' onClick={() => void resume()} aria-label='Продолжить тренировку'><Icon name='play' /></button> : <span className='camera-rest'>{restSeconds} с</span>}<button className='camera-finish' onClick={finish} aria-label={programStep ? 'Прервать программу у видео' : 'Завершить тренировку у видео'}><span>■</span><small>{programStep ? 'Прервать' : 'Завершить'}</small></button></div>}
+          {started && <div className='camera-actions' aria-label='Управление у видео'><button className='camera-sound' aria-label={voiceEnabled ? 'Выключить голос' : 'Включить голос'} aria-pressed={voiceEnabled} disabled={!voiceSupported} onClick={() => setVoiceEnabled(v => !v)}><Icon name={voiceEnabled && !voiceError ? 'volume' : 'volume-off'} /></button>{accepting ? <button className='camera-pause' onClick={pause} aria-label='Поставить на паузу'><Icon name='pause' /></button> : (phase === 'paused' || phase === 'next') ? <button className='camera-pause' onClick={() => void resume()} aria-label='Продолжить тренировку'><Icon name='play' /></button> : <span className='camera-rest'>{restSeconds} с</span>}<button className='camera-finish' onClick={finish} aria-label={programStep ? 'Прервать программу у видео' : 'Завершить тренировку у видео'}><span>■</span><small>{programStep ? 'Прервать' : 'Завершить'}</small></button></div>}
           <div className='camera-bottom'>
             <span className='status-dot' aria-hidden='true' />
             <span role='status'>{status}</span>
@@ -314,28 +316,17 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
                   : 'Озвучивание не поддерживается этим браузером'
               }
             >
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                strokeWidth='1.8'
-                strokeLinecap='round'
-                strokeLinejoin='round'
-                aria-hidden='true'
-              >
-                <path d='M4 9v6h4l5 4V5L8 9H4Z' />
-                {voiceEnabled ? (
-                  <path d='M17 9a5 5 0 0 1 0 6M19 6a9 9 0 0 1 0 12' />
-                ) : (
-                  <path d='m17 9 5 6m0-6-5 6' />
-                )}
-              </svg>
+              <Icon name={voiceEnabled && !voiceError ? 'volume' : 'volume-off'} />
               {voiceSupported
                 ? voiceEnabled
-                  ? 'Звук включён'
+                  ? voiceError ? 'Ошибка звука' : 'Звук включён'
                   : 'Звук выключен'
                 : 'Звук недоступен'}
             </button>
+          </div>
+          <div className='voice-check'>
+            <p className={voiceError ? 'storage-error' : 'fine-print'} role={voiceError ? 'alert' : undefined}>{voiceError || 'Голос озвучивает замечания по технике. Остальные подсказки — на экране.'}</p>
+            <button type='button' className='button button-ghost' disabled={!voiceSupported} onClick={testSound}>Проверить звук</button>
           </div>
           <p className='variant-note'>{def.equipment} · {def.view==='side'?'Вид сбоку':'Вид спереди'} · {options.variant==='seated'?'Сидя':options.variant==='standing'?'Стоя':'Основной вариант'} · Предварительные правила</p>
           <div className='rep-block'>

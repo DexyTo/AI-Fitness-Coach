@@ -153,6 +153,10 @@ summary:hover { color: var(--blue); }
 .voice-toggle { color: var(--blue); background: #edf2ff; border-color: #dce5ff; letter-spacing: 0; }
 .voice-toggle:hover:not(:disabled) { background: #e3ebff; }
 .voice-toggle[aria-pressed='false'] { color: var(--muted); border-color: var(--border); }
+.voice-check { margin: 10px 0 16px; }
+.voice-check p { margin: 0 0 8px; }
+.voice-check .button { min-height: 36px; font-size: 11px; }
+.camera-sound[aria-pressed='false'] { color: var(--muted); }
 .session-controls { background: white; border-color: var(--border); border-radius: 12px; }
 .video-hud { position: absolute; z-index: 4; inset: 18px 18px auto; display: flex; justify-content: space-between; pointer-events: none; }
 .video-hud > div { padding: 10px 15px; background: #fffffff2; backdrop-filter: blur(10px); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 12px; min-width: 80px; }
