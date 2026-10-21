@@ -3,6 +3,8 @@ dist
 .DS_Store
 *.local
 
+/codex-tasks/
+
 # Private recordings, annotations and raw validation exports (never commit).
 /validation-private/
 /.validation-build/
