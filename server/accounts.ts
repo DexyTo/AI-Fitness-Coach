@@ -1,3 +1,6 @@
+import { exerciseSnapshot } from '../shared/exerciseSnapshot.js';
+import { isLegacy } from '../src/exercises/registry.js';
+import { validExerciseGoal } from '../shared/workout.js';
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -141,6 +144,7 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
     const user = requireUser(req);
     const body = req.body;
     const snapshot: Snapshot = 'kind' in body ? {kind:'program',program:body.program,mode:body.mode,conditions:body.conditions.trim()} : { exercise:body.exercise, mode:body.mode, goal:body.goal, conditions:body.conditions.trim() };
+    if(!('kind' in snapshot)&&!validExerciseGoal(snapshot.exercise,snapshot.goal))fail(400,'INVALID_GOAL','Единица цели или вариант не соответствуют упражнению.');
     const json = canonical(snapshot);
     const row = db.prepare('SELECT * FROM workout_runs WHERE user_id=? AND request_id=?').get(user.id,req.body.requestId) as { id: string; snapshot_json: string; created_at: string } | undefined;
     if (row && row.snapshot_json !== json) fail(409,'RUN_CONFLICT','Этот запрос уже связан с другой целью.');
@@ -149,13 +153,17 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
       if (!validPlan(plan) || !template || !same({...plan,steps:plan.steps.map(s => ({id:s.id,exercise:s.exercise}))},{...template,steps:template.steps.map(s => ({id:s.id,exercise:s.exercise}))})) fail(409,'PROGRAM_CHANGED','Шаблон изменился или недоступен. Открой программу заново.');
     }
     const id = row?.id ?? randomUUID(), createdAt = row?.created_at ?? new Date().toISOString();
-    if (!row) db.prepare('INSERT INTO workout_runs (id,user_id,request_id,snapshot_json,created_at,reward_rules_version) VALUES (?,?,?,?,?,?)').run(id,user.id,req.body.requestId,json,createdAt,RULES_VERSION);
+    if (!row) {
+      const steps='kind' in snapshot?snapshot.program.steps:[snapshot];
+      const rules=steps.map(step=>isLegacy(step.exercise)?null:exerciseSnapshot(step.exercise,step.goal));
+      db.prepare('INSERT INTO workout_runs (id,user_id,request_id,snapshot_json,created_at,reward_rules_version,analysis_snapshot_json) VALUES (?,?,?,?,?,?,?)').run(id,user.id,req.body.requestId,json,createdAt,RULES_VERSION,canonical(rules));
+    }
     return reply.code(row ? 200 : 201).send({ id, snapshot, createdAt });
   });
   const findResult = (userId: string, id: string) => db.prepare('SELECT * FROM workout_results WHERE id=? AND user_id=?').get(id,userId) as ResultRow | undefined;
   app.post<{ Params: { id: string }; Body: { record: HistoryRecord } }>('/api/runs/:id/complete', { bodyLimit: 4 * 1024 * 1024, schema: { params: obj({ id:idSchema }), body: obj({ record:{anyOf:[workoutSchema,programRecordSchema]} }), querystring: emptyQuery } }, async (req,reply) => {
     const user = requireUser(req);
-    const run = db.prepare('SELECT * FROM workout_runs WHERE id=? AND user_id=?').get(req.params.id,user.id) as { snapshot_json: string; reward_rules_version: string | null } | undefined;
+    const run = db.prepare('SELECT * FROM workout_runs WHERE id=? AND user_id=?').get(req.params.id,user.id) as { snapshot_json: string; reward_rules_version: string | null; analysis_snapshot_json:string|null } | undefined;
     if (!run) fail(404,'NOT_FOUND','Запуск не найден.');
     const record = req.body.record;
     if (isProgram(record)) {
@@ -164,6 +172,9 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
     const snapshot = JSON.parse(run.snapshot_json) as Snapshot;
     const resultSnapshot: Snapshot = isProgram(record) ? {kind:'program',program:record.program,mode:record.mode,conditions:record.conditions} : {exercise:record.exercise,mode:record.mode,goal:record.goal,conditions:record.conditions};
     if (record.id !== req.params.id || canonical(resultSnapshot) !== canonical(snapshot) || (isProgram(record) && record.date !== (db.prepare('SELECT created_at FROM workout_runs WHERE id=?').get(req.params.id) as {created_at:string}).created_at)) fail(409,'SNAPSHOT_MISMATCH','Результат не соответствует цели запуска.');
+    const analysisRules=run.analysis_snapshot_json?JSON.parse(run.analysis_snapshot_json) as unknown[]:null;
+    const children=isProgram(record)?record.steps:[record];
+    if(children.some((child,index)=>!isLegacy(child.exercise)&&(!analysisRules?.[index]||canonical(child.metadata.exerciseSnapshot)!==canonical(analysisRules[index]))))fail(409,'RULES_MISMATCH','Параметры анализа не соответствуют сохранённому запуску.');
     const json = canonical(record);
     const saved = db.transaction(() => {
       const existing = db.prepare('SELECT * FROM workout_results WHERE run_id=? AND user_id=?').get(req.params.id,user.id) as ResultRow | undefined;
@@ -172,7 +183,7 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
       if (!existing) {
         const eventAt = new Date().toISOString();
         checkDuelCompletion(db,user.id,req.params.id,record,eventAt,fail);
-        db.prepare("INSERT INTO workout_results (id,user_id,run_id,source,source_version,record_json,created_at) VALUES (?,?,?,'training',?,?,?)").run(id,user.id,req.params.id,isProgram(record) ? 2 : 1,json,eventAt);
+        db.prepare("INSERT INTO workout_results (id,user_id,run_id,source,source_version,record_json,created_at) VALUES (?,?,?,'training',?,?,?)").run(id,user.id,req.params.id,record.schemaVersion,json,eventAt);
         accountCompletion(db,user.id,id,record,run.reward_rules_version,eventAt);
         completeChallenge(db,user.id,req.params.id,id,record,eventAt);
         completeDuel(db,user.id,req.params.id,id,record,eventAt);
@@ -220,7 +231,7 @@ export function registerAccounts(app: FastifyInstance, db: Database.Database) {
           existing++;
         } else {
           added++;
-          if (!preview) db.prepare("INSERT INTO workout_results (id,user_id,source,source_version,original_id,record_json,created_at) VALUES (?,?,'historical_import',1,?,?,?)").run(randomUUID(),user.id,record.id,json,new Date().toISOString());
+          if (!preview) db.prepare("INSERT INTO workout_results (id,user_id,source,source_version,original_id,record_json,created_at) VALUES (?,?,'historical_import',?,?,?,?)").run(randomUUID(),user.id,record.schemaVersion,record.id,json,new Date().toISOString());
         }
       }
       return { added, existing, total:req.body.records.length };

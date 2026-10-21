@@ -1,3 +1,4 @@
+import { goalSchemaDefinition, workoutSchemaDefinition } from './workoutSchema.js';
 import Fastify, { type FastifyServerOptions } from 'fastify';
 import type Database from 'better-sqlite3';
 import { ApiError, registerAccounts } from './accounts.js';
@@ -6,8 +7,9 @@ export function buildApp(db: Database.Database, logger: FastifyServerOptions['lo
   const app = Fastify({
     logger,
     bodyLimit: 64 * 1024,
-    ajv: { customOptions: { removeAdditional: false, coerceTypes: false } },
+    ajv: { customOptions: { removeAdditional: false, coerceTypes: false, inlineRefs: false } },
   });
+  app.addSchema(goalSchemaDefinition);app.addSchema(workoutSchemaDefinition);
   app.addHook('onClose', async () => { db.close(); });
   app.setErrorHandler((error, request, reply) => {
     const statusCode = error instanceof Error && 'statusCode' in error ? error.statusCode : undefined;

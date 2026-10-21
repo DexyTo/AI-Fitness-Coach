@@ -16,11 +16,11 @@ const achievements = [
   { id: 'ten', title: 'Десятка', description: 'Выполни 10 тренировок', metric: 'workouts', target: 10 },
   { id: 'days', title: 'Возвращайся к движению', description: 'Занимайся в 3 разных дня по Europe/Kyiv', metric: 'days', target: 3 },
   { id: 'reps', title: 'Сотня движений', description: 'Накопи 100 полных повторов в пределах целей', metric: 'reps', target: 100 },
-  { id: 'variety', title: 'Два движения', description: 'Выполни приседания и отжимания', metric: 'exercises', target: 2 },
+  { id: 'variety', title: 'Два движения', description: 'Выполни приседания и отжимания', metric: 'legacyVariety', target: 2 },
 ] as const;
 function totals(db: Database.Database, userId: string) {
   const events = db.prepare('SELECT reps, exercises_json, project_day FROM progression_events WHERE user_id=? AND eligible=1').all(userId) as { reps: number; exercises_json: string; project_day: string }[];
-  return { workouts: events.length, reps: events.reduce((n, e) => n + e.reps, 0), days: new Set(events.map(e => e.project_day)).size, exercises: new Set(events.flatMap(e => JSON.parse(e.exercises_json) as string[])).size };
+  return { legacyVariety:new Set(events.flatMap(e=>(JSON.parse(e.exercises_json) as string[]).filter(id=>id==='squat'||id==='pushup'))).size, workouts: events.length, reps: events.reduce((n, e) => n + e.reps, 0), days: new Set(events.map(e => e.project_day)).size, exercises: new Set(events.flatMap(e => JSON.parse(e.exercises_json) as string[])).size };
 }
 const xpTotal = (db: Database.Database, userId: string, day?: string) => (db.prepare(`SELECT COALESCE(SUM(amount),0) AS xp FROM reward_ledger WHERE user_id=? AND currency='xp'${day ? " AND source_type='workout' AND project_day=?" : ''}`).get(...(day ? [userId, day] : [userId])) as { xp: number }).xp;
 
@@ -45,13 +45,13 @@ export function appendReward(db: Database.Database, event: RewardEvent) {
 export function accountCompletion(db: Database.Database, userId: string, resultId: string, record: HistoryRecord, runRules: string | null, eventAt: string) {
   if (!db.inTransaction) throw new Error('Completion requires a transaction');
   const children = isProgram(record) ? record.steps : [record];
-  const completed = (!isProgram(record) || record.ended === 'completed') && children.length > 0 && children.every(r => r.sets.length === r.goal.sets && r.sets.every(s => s.ended === 'completed' && s.result.reps >= r.goal.reps));
+  const completed = !children.some(r=>r.goal.unit==='seconds') && (!isProgram(record) || record.ended === 'completed') && children.length > 0 && children.every(r => r.sets.length === r.goal.sets && r.sets.every(s => s.ended === 'completed' && s.result.reps >= (r.goal.reps??Infinity)));
   let reason: RewardReason = runRules !== RULES_VERSION ? 'legacy' : record.mode === 'demo' ? 'demo' : record.mode === 'video' ? 'video' : !completed ? 'incomplete' : 'awarded';
   const eligible = reason === 'awarded';
   const day = projectDay(eventAt);
   const xp = eligible ? Math.min(WORKOUT_XP, Math.max(0, DAILY_XP_LIMIT - xpTotal(db, userId, day))) : 0;
   if (eligible && xp === 0) reason = 'daily_limit';
-  const reps = eligible ? children.reduce((n, r) => n + r.goal.sets * r.goal.reps, 0) : 0;
+  const reps = eligible ? children.reduce((n, r) => n + r.goal.sets * (r.goal.reps??0), 0) : 0;
   db.prepare('INSERT INTO progression_events VALUES (?,?,?,?,?,?,?,?,?)').run(resultId, userId, reason, Number(eligible), reps, JSON.stringify(eligible ? [...new Set(children.map(r => r.exercise))] : []), eventAt, day, RULES_VERSION);
   if (xp) appendReward(db, { userId, currency: 'xp', sourceType: 'workout', sourceId: resultId, amount: xp, eventAt, rulesVersion: RULES_VERSION });
   if (eligible) {
@@ -63,7 +63,10 @@ export function receipt(db: Database.Database, userId: string, resultId: string,
   const event = db.prepare('SELECT reason,event_at FROM progression_events WHERE user_id=? AND result_id=?').get(userId, resultId) as { reason: RewardReason; event_at: string } | undefined;
   const xp = (db.prepare("SELECT amount FROM reward_ledger WHERE user_id=? AND currency='xp' AND source_type='workout' AND source_id=?").get(userId, resultId) as { amount: number } | undefined)?.amount ?? 0;
   const earned = db.prepare('SELECT achievement_id FROM user_achievements WHERE user_id=? AND result_id=? ORDER BY achievement_id').all(userId, resultId) as { achievement_id: string }[];
-  return { reason: event?.reason ?? (source === 'historical_import' ? 'import' : 'legacy'), xp, earnedAt: event?.event_at ?? null, achievements: earned.map(r => r.achievement_id === 'first-challenge' ? 'Испытание пройдено' : r.achievement_id === 'first-duel' ? 'Первая дуэль' : achievements.find(a => a.id === r.achievement_id)?.title ?? r.achievement_id) };
+  const raw=db.prepare('SELECT record_json FROM workout_results WHERE id=? AND user_id=?').get(resultId,userId) as {record_json:string}|undefined;
+  const record=raw?JSON.parse(raw.record_json) as HistoryRecord:null;
+  const unsupported=record&&(isProgram(record)?record.steps:[record]).some(r=>r.goal.unit==='seconds');
+  return { reason: unsupported&&event?.reason==='incomplete'?'unsupported_hold':event?.reason ?? (source === 'historical_import' ? 'import' : 'legacy'), xp, earnedAt: event?.event_at ?? null, achievements: earned.map(r => r.achievement_id === 'first-challenge' ? 'Испытание пройдено' : r.achievement_id === 'first-duel' ? 'Первая дуэль' : achievements.find(a => a.id === r.achievement_id)?.title ?? r.achievement_id) };
 }
 export function progression(db: Database.Database, userId: string, now = new Date()): Progression {
   const stats = totals(db, userId);
@@ -80,7 +83,7 @@ export function progression(db: Database.Database, userId: string, now = new Dat
   const challengeXp = (db.prepare("SELECT COALESCE(SUM(amount),0) AS n FROM reward_ledger WHERE user_id=? AND currency='xp' AND source_type='challenge'").get(userId) as { n: number }).n;
   const duelXp = (db.prepare("SELECT COALESCE(SUM(amount),0) AS n FROM reward_ledger WHERE user_id=? AND currency='xp' AND source_type='duel'").get(userId) as { n: number }).n;
   const duelCount = (db.prepare("SELECT COUNT(*) AS n FROM duel_events WHERE user_id=? AND json_extract(receipt_json,'$.xp')>0").get(userId) as { n: number }).n;
-  return { ...levelFor(xpTotal(db, userId)), todayXp: xpTotal(db, userId, projectDay(now)), dailyLimit: DAILY_XP_LIMIT, workoutXp: WORKOUT_XP, timeZone: TIME_ZONE, stats, activity, competitionPoints, challengeXp, duelXp,
+  return { ...levelFor(xpTotal(db, userId)), todayXp: xpTotal(db, userId, projectDay(now)), dailyLimit: DAILY_XP_LIMIT, workoutXp: WORKOUT_XP, timeZone: TIME_ZONE, stats:{workouts:stats.workouts,reps:stats.reps,days:stats.days,exercises:stats.exercises}, activity, competitionPoints, challengeXp, duelXp,
     achievements: [...achievements.map(a => ({ id: a.id, title: a.title, description: a.description, target: a.target, progress: Math.min(stats[a.metric], a.target), earnedAt: earned.find(e => e.achievement_id === a.id)?.earned_at ?? null, reward: 'Значок в профиле · без бонусных XP' })),
       { id: 'first-challenge', title: 'Испытание пройдено', description: 'Выполни первое испытание', target: 1, progress: Math.min(1,challengeCount), earnedAt: earned.find(e => e.achievement_id === 'first-challenge')?.earned_at ?? null, reward: 'Значок в профиле · без бонусных XP' },
       { id: 'first-duel', title: 'Первая дуэль', description: 'Набери положительный балл в завершённой дуэли', target: 1, progress: Math.min(1,duelCount), earnedAt: earned.find(e => e.achievement_id === 'first-duel')?.earned_at ?? null, reward: 'Значок в профиле · без бонусных XP' }] };

@@ -1,3 +1,4 @@
+import { goalReached } from '../../shared/workout';
 import { criterionLabels, type FeedbackCode } from '../exercises/types';
 import { combineResults, SCHEMA_VERSION, type WorkoutRecord } from './session';
 
@@ -58,7 +59,7 @@ export function metrics(record: WorkoutRecord) {
     return [code, { denominator: assessed.length, deviations: assessed.filter(a => a.criteria[code as FeedbackCode]!.status === 'deviation').length }];
   })) as Record<FeedbackCode, { denominator: number; deviations: number }>;
   return { result, criteria, completedSets: record.sets.filter(s => s.ended === 'completed').length,
-    targetSets: record.sets.filter(s => s.result.reps >= record.goal.reps).length };
+    targetSets: record.sets.filter(s => goalReached(s.result,record.goal)).length };
 }
 export function downloadJson(value: unknown, name: string, raw = false) {
   const url = URL.createObjectURL(new Blob([raw ? String(value) : JSON.stringify(value, null, 2)], { type: 'application/json' }));

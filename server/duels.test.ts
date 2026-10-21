@@ -212,7 +212,7 @@ describe('asynchronous duels and immutable accounting',()=>{
     const db=openDatabase(join(s.dir,'old.sqlite'));cleanups.push(()=>db.close());migrate(db,oldDir);
     db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?)').run('old','old','test-only','old','sprout',new Date().toISOString());
     db.prepare('INSERT INTO workout_runs (id,user_id,request_id,snapshot_json,created_at) VALUES (?,?,?,?,?)').run('old','old','old','{}',new Date().toISOString());
-    expect(migrate(db)).toEqual(['007_duels.sql','008_leaderboard_demo.sql']);expect(migrate(db)).toEqual([]);
+    expect(migrate(db)).toEqual(['007_duels.sql','008_leaderboard_demo.sql','009_exercise_units.sql']);expect(migrate(db)).toEqual([]);
     expect(db.prepare('SELECT duel_participant_id FROM workout_runs').get()).toEqual({duel_participant_id:null});
     expect(db.prepare('SELECT COUNT(*) AS n FROM duel_events').get()).toEqual({n:0});
   });

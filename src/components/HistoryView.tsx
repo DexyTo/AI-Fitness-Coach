@@ -1,3 +1,6 @@
+import { HoldSummary, SideSummary } from './ExerciseSetup';
+import { goalLabel, resultValue } from '../../shared/workout';
+import { isLegacy, criterionName } from '../exercises/registry';
 import { useEffect, useState } from 'react';
 import { AttemptReport } from './AttemptReport';
 import { Icon } from './Icon';
@@ -10,11 +13,12 @@ const ratio = (n: number, d: number) => d ? `${n}/${d} (${Math.round(n / d * 100
 const durationLabel = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 export function WorkoutMetrics({ record }: { record: WorkoutRecord }) {
   const { result, completedSets, targetSets, criteria } = metrics(record);
-  return <div className='history-metrics'>
+  if(result.hold)return <div className='history-metrics'><HoldSummary result={result} exercise={record.exercise}/><p>Цели достигнуты в {targetSets}/{record.goal.sets} подходах. Удержания не входят в правила XP v1 и соревнований.</p></div>;
+  return <div className='history-metrics'><SideSummary result={result}/>
     <div className='record-stats'><div><strong>{result.reps}</strong><span>Полных повторов</span></div><div><strong>{completedSets}<small> / {record.goal.sets}</small></strong><span>Подходов завершено</span></div><div><strong>{result.incomplete}</strong><span>Неполных попыток</span></div></div>
     <details className='metrics-details'><summary>Замечания и качество наблюдения</summary>
       <p>Достигли цели: {targetSets}/{record.goal.sets} подходов. Неоценённые: {ratio(result.unassessed, result.attempts.length)} от всех попыток.</p>
-      <ul>{Object.entries(criteria).filter(([code]) => code !== (record.exercise === 'squat' ? 'line' : 'lean')).map(([code, c]) => <li key={code}>{criterionLabels[code as keyof typeof criterionLabels]}: замечания в {ratio(c.deviations, c.denominator)} попыток, где критерий оценивался.</li>)}</ul>
+      <ul>{Object.entries(criteria).filter(([code]) => !isLegacy(record.exercise)||code !== (record.exercise === 'squat' ? 'line' : 'lean')).map(([code, c]) => <li key={code}>{isLegacy(record.exercise)?criterionLabels[code as keyof typeof criterionLabels]:criterionName(record.exercise,code as keyof typeof criterionLabels)}: замечания в {ratio(c.deviations, c.denominator)} попыток, где критерий оценивался.</li>)}</ul>
     </details>
   </div>;
 }
@@ -22,14 +26,15 @@ export function WorkoutDetails({ record }: { record: WorkoutRecord }) {
   return <section className='workout-details'>
     <h2>Подходы и условия</h2>
     <p>{modeLabels[record.mode]} · {labels[record.exercise]} · {new Date(record.date).toLocaleString('ru-RU')}</p>
-    <p>Цель: {record.goal.sets} подходов × {record.goal.reps} повторов. Отдых {record.goal.restSeconds} с. Длительность с подготовкой, паузами и отдыхом: {Math.round(record.duration)} с.</p>
+    <p>Цель: {record.goal.sets} подходов × {goalLabel(record.goal)}. Отдых {record.goal.restSeconds} с. Длительность с подготовкой, паузами и отдыхом: {Math.round(record.duration)} с.</p>
+    <p>Вариант: {record.goal.options?.variant==='seated'?'сидя':record.goal.options?.variant==='standing'?'стоя':'основной'}. {record.goal.options?.weightKg!==undefined?`Вес одной гантели: ${record.goal.options.weightKg} кг (введён пользователем).`:''}</p>
     <p>Условия съёмки: {record.conditions || 'не указаны — сравнение между записями отключено'}.</p>
     <WorkoutMetrics record={record} />
     {record.sets.map(set => <details key={set.number} className='set-details'>
-      <summary>Подход {set.number}<span>{set.result.reps}/{record.goal.reps} полных · {set.ended === 'completed' ? 'завершён' : 'прерван'} · {Math.round(set.durationMs / 1000)} с</span></summary>
+      <summary>Подход {set.number}<span>{resultValue(set.result).toFixed(set.result.hold?1:0)}/{goalLabel(record.goal)} · {set.ended === 'completed' ? 'завершён' : 'прерван'} · {Math.round(set.durationMs / 1000)} с</span></summary>
       <p>Наблюдение без пауз и отдыха: нужные точки видны {Math.round(set.observation.readyMs / 1000)} / {Math.round(set.observation.sampledMs / 1000)} с; частично {Math.round(set.observation.partialMs / 1000)} с; недоступно {Math.round(set.observation.unavailableMs / 1000)} с. Ракурс проверяется отдельно.</p>
       <p>Ручное подтверждение профиля: {set.observation.sideViewConfirmed ? 'использовалось' : 'не использовалось'}. Подготовка и пауза включены в длительность подхода.</p>
-      {set.result.attempts.length ? set.result.attempts.map(a => <AttemptReport key={a.id} attempt={a} exercise={record.exercise} compact />) : <p>Наблюдаемых попыток нет.</p>}
+      {set.result.hold?<HoldSummary result={set.result} exercise={record.exercise}/>:set.result.attempts.length ? set.result.attempts.map(a => <AttemptReport key={a.id} attempt={a} exercise={record.exercise} compact />) : <p>Наблюдаемых попыток нет.</p>}
     </details>)}
     <details><summary>Версии и параметры анализа</summary><pre>{JSON.stringify(record.metadata, null, 2)}</pre></details>
     <p className='fine-print'>Правила предварительные. Эти данные описывают наблюдаемые движения, а не рост силы, мышц или изменение риска травмы.</p>
@@ -69,7 +74,7 @@ export function HistoryView({ onHome }: { onHome: () => void }) {
       <div className='record-heading'><span className='exercise-glyph'><Icon name={record.exercise} /></span><div><span className='record-date'>{new Date(record.date).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span><h3>{labels[record.exercise]}</h3></div><span className={`mode-badge ${record.mode === 'demo' ? 'demo' : ''}`}>{modeLabels[record.mode]}</span></div>
       <WorkoutMetrics record={record} />
       <details><summary>Подробности тренировки</summary><WorkoutDetails record={record} /></details>
-      <div className='record-footer'><span>{durationLabel(record.duration)} · цель {record.goal.sets} × {record.goal.reps}</span><div className='history-actions'><button className='button button-ghost' onClick={() => downloadJson({ schemaVersion: 1, records: [record] }, 'playfit-workout.json')}>Экспорт</button><button className='button button-ghost danger-text' onClick={() => setConfirm(record.id)}>Удалить…</button></div></div>
+      <div className='record-footer'><span>{durationLabel(record.duration)} · цель {record.goal.sets} × {goalLabel(record.goal)}</span><div className='history-actions'><button className='button button-ghost' onClick={() => downloadJson({ schemaVersion: 1, records: [record] }, 'playfit-workout.json')}>Экспорт</button><button className='button button-ghost danger-text' onClick={() => setConfirm(record.id)}>Удалить…</button></div></div>
       {confirm === record.id && <div role='alert' className='delete-confirm'><p>Удалить эту тренировку без возможности восстановления?</p><button className='button button-danger' onClick={() => remove(record.id)}>Удалить запись</button><button className='button' onClick={() => setConfirm(null)}>Отмена</button></div>}
     </article>)}
     <GuestProgramHistory />
@@ -78,7 +83,7 @@ export function HistoryView({ onHome }: { onHome: () => void }) {
       {groups.map(selected => {
         const records = comparableHistory(history.records, selected);
         return <details key={selected.id}><summary>{labels[selected.exercise]} · {modeLabels[selected.mode]} · {selected.conditions || 'условия неизвестны'} · {records.length} записей</summary>
-          <p>Правила: {selected.metadata.rulesVersion} · амплитуда {selected.metadata.variant.lowerAngle}–{selected.metadata.variant.upperAngle}°.</p>
+          <p>Правила: {selected.metadata.rulesVersion}{isLegacy(selected.exercise)?` · амплитуда ${selected.metadata.variant.lowerAngle}–${selected.metadata.variant.upperAngle}°`: ' · параметры зафиксированы в снимке упражнения'}.</p>
           {records.length < 2 && <p>Для сравнения нужна ещё одна запись с теми же условиями и параметрами.</p>}
           <p>Разница показателей сама по себе не доказывает физический прогресс.</p>
           {records.map(r => <article key={r.id}><h3>{new Date(r.date).toLocaleString('ru-RU')}</h3><WorkoutMetrics record={r} /></article>)}

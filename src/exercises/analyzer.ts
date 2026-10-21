@@ -1,8 +1,9 @@
+import { MultiExerciseAnalyzer } from './multiAnalyzer';
 import { observePose, sideView, type BodySide } from '../pose/landmarks';
 import { tracking, variant } from './config';
 import type {
   CriterionResults, ExerciseAnalyzer, ExerciseAnalysisResult, ExerciseFeedback,
-  ExerciseResult, ExerciseType, FeedbackCode, MovementAttempt, ObservationQuality,
+  ExerciseResult, ExerciseType, LegacyExercise, FeedbackCode, MovementAttempt, ObservationQuality,
   ObservationReason, PoseLandmarks, ExerciseState,
   UnavailableSourceReason,
 } from './types';
@@ -55,7 +56,7 @@ export class MovementAnalyzer implements ExerciseAnalyzer {
   private feedback: ExerciseFeedback[] = [];
   private criteria: CriterionResults = {};
   private observation: ObservationQuality = { status: 'unavailable', side: null, reasons: [{ code: 'no_pose' }] };
-  constructor(private readonly exercise: ExerciseType) { this.view = exercise === 'squat' ? 'unknown' : 'not_required'; }
+  constructor(private readonly exercise: LegacyExercise) { this.view = exercise === 'squat' ? 'unknown' : 'not_required'; }
   confirmSideView() { this.viewConfirmed = true; }
   reset() {
     this.resetMotion();
@@ -373,6 +374,6 @@ export class MovementAnalyzer implements ExerciseAnalyzer {
     this.phase = 'Готов';
   }
 }
-export function createAnalyzer(exercise: ExerciseType): ExerciseAnalyzer {
-  return new MovementAnalyzer(exercise);
+export function createAnalyzer(exercise: ExerciseType, options?: Partial<import('./types').ExerciseOptions>): ExerciseAnalyzer {
+  return exercise === 'squat' || exercise === 'pushup' ? new MovementAnalyzer(exercise) : new MultiExerciseAnalyzer(exercise, options);
 }

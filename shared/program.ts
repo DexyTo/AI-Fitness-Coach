@@ -1,5 +1,6 @@
+import { exerciseIds } from '../src/exercises/types.js';
 import type { WorkoutRecord, TrainingGoal } from './workout.js';
-import { validGoal } from './workout.js';
+import { validExerciseGoal } from './workout.js';
 import { isWorkoutRecord } from './historyValidation.js';
 
 export interface ProgramStep { id: string; exercise: WorkoutRecord['exercise']; goal: TrainingGoal; transitionSeconds: number }
@@ -29,8 +30,8 @@ export function validPlan(plan: ProgramPlan) {
     (plan.origin === 'catalog' ? plan.ownerId === null : typeof plan.ownerId === 'string') &&
     Array.isArray(plan.steps) && plan.steps.length >= 1 && plan.steps.length <= 12 &&
     new Set(plan.steps.map(s => s.id)).size === plan.steps.length && plan.steps.every(s =>
-      typeof s.id === 'string' && s.id.length > 0 && s.id.length <= 64 && ['squat','pushup'].includes(s.exercise) &&
-      validGoal(s.goal) && Number.isInteger(s.transitionSeconds) && s.transitionSeconds >= 0 && s.transitionSeconds <= 3600);
+      typeof s.id === 'string' && s.id.length > 0 && s.id.length <= 64 && exerciseIds.includes(s.exercise) &&
+      validExerciseGoal(s.exercise,s.goal) && Number.isInteger(s.transitionSeconds) && s.transitionSeconds >= 0 && s.transitionSeconds <= 3600);
 }
 export const stepCompleted = (record: WorkoutRecord) => record.sets.length === record.goal.sets && record.sets.every(s => s.ended === 'completed');
 export function validProgramRecord(record: ProgramRecord) {

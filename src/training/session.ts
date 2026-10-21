@@ -1,3 +1,5 @@
+import { exerciseRegistry, isLegacy, MULTI_RULES_VERSION, optionsFor } from '../exercises/registry';
+import { multiTiming } from '../exercises/multiAnalyzer';
 import { createAnalyzer } from '../exercises/analyzer';
 import { RULES_VERSION, tracking, variant } from '../exercises/config';
 import { COACHING_POLICY_VERSION } from '../exercises/coaching';
@@ -12,11 +14,17 @@ export const phaseLabels: Record<SessionPhase, string> = {
 export const modeLabels: Record<InputMode, string> = { camera: 'Живая тренировка', video: 'Анализ записи', demo: 'Синтетическое демо' };
 export { validGoal } from '../../shared/workout';
 export type { TrainingGoal, ObservationSummary, SetRecord, SourceContext, WorkoutRecord } from '../../shared/workout';
-import { validGoal, type TrainingGoal, type ObservationSummary, type SetRecord, type SourceContext, type WorkoutRecord } from '../../shared/workout';
+import { goalReached, validExerciseGoal, type TrainingGoal, type ObservationSummary, type SetRecord, type SourceContext, type WorkoutRecord } from '../../shared/workout';
 export const emptyResult = (): ExerciseResult => ({ reps: 0, incomplete: 0, unassessed: 0, withoutFindings: 0, withErrors: 0, errors: {}, attempts: [] });
 export function combineResults(results: ExerciseResult[]): ExerciseResult {
   const all = emptyResult();
   for (const result of results) {
+    if (result.hold) {
+      all.kind='hold';all.hold ??= {creditedMs:0,longestMs:0,deviationMs:0,unassessedMs:0,intervals:[]};
+      all.hold.creditedMs+=result.hold.creditedMs;all.hold.longestMs=Math.max(all.hold.longestMs,result.hold.longestMs);
+      all.hold.deviationMs+=result.hold.deviationMs;all.hold.unassessedMs+=result.hold.unassessedMs;all.hold.intervals.push(...structuredClone(result.hold.intervals));
+    }
+    if(result.sides){all.sides??={left:0,right:0};all.sides.left+=result.sides.left;all.sides.right+=result.sides.right;}
     for (const key of ['reps', 'incomplete', 'unassessed', 'withoutFindings', 'withErrors'] as const) all[key] += result[key];
     for (const [code, count] of Object.entries(result.errors)) all.errors[code as keyof typeof all.errors] = (all.errors[code as keyof typeof all.errors] ?? 0) + count;
     for (const attempt of result.attempts) all.attempts.push({ ...structuredClone(attempt), id: all.attempts.length + 1 });
@@ -36,11 +44,14 @@ export class TrainingController {
   private observation: ObservationSummary = this.blankObservation();
   private final: WorkoutRecord | null = null;
   private lastSourceTime = 0;
+  private readonly exerciseSnapshot;
+
   constructor(readonly exercise: ExerciseType, readonly mode: InputMode, readonly goal: TrainingGoal,
     readonly conditions: string, private startAt: number, private date = new Date().toISOString(), private id: string = crypto.randomUUID(), private source?: SourceContext) {
-    if (!validGoal(goal)) throw new Error('Проверьте цель: подходы 1–100, повторы 1–1000, отдых 0–3600 секунд.');
-    this.goal = { ...goal };
-    this.analyzer = createAnalyzer(exercise);
+    if (!validExerciseGoal(exercise, goal)) throw new Error('Проверьте цель: подходы 1–100, повторы 1–1000, отдых 0–3600 секунд.');
+    this.exerciseSnapshot={id:exercise,version:MULTI_RULES_VERSION,unit:exerciseRegistry[exercise].unit,options:optionsFor(exercise,goal.options),thresholds:structuredClone(exerciseRegistry[exercise].thresholds)};
+    this.goal = structuredClone(goal);
+    this.analyzer = createAnalyzer(exercise, goal.options);
     this.setStart = startAt;
   }
   private blankObservation(): ObservationSummary { return { readyMs: 0, partialMs: 0, unavailableMs: 0, sampledMs: 0, sideViewConfirmed: false }; }
@@ -64,7 +75,7 @@ export class TrainingController {
     this.lastSample = { at: now, status: current.observation.status };
     this.observation.sideViewConfirmed ||= current.preparation.viewConfirmed;
     this.phase = current.preparation.stage === 'ready' || current.preparation.stage === 'active' ? 'active' : 'preparing';
-    if (current.result.reps >= this.goal.reps) this.endSet(sourceTime, now);
+    if (goalReached(current.result, this.goal)) this.endSet(sourceTime, now);
     return this.analyzer.snapshot();
   }
   pause(sourceTime: number) {
@@ -78,7 +89,7 @@ export class TrainingController {
     this.advance(now);
     if (this.phase === 'paused') this.phase = 'preparing';
     else if (this.phase === 'next') {
-      this.analyzer = createAnalyzer(this.exercise);
+      this.analyzer = createAnalyzer(this.exercise, this.goal.options);
       this.observation = this.blankObservation();
       this.setStart = now;
       this.phase = 'preparing';
@@ -106,10 +117,11 @@ export class TrainingController {
     if (this.acceptsFrames || this.phase === 'paused') this.endSet(sourceTime, now, 'interrupted');
     this.phase = 'completed';
     this.final = {
-      schemaVersion: SCHEMA_VERSION, id: this.id, date: this.date, exercise: this.exercise, mode: this.mode,
+      schemaVersion: isLegacy(this.exercise) ? 1 : 3, id: this.id, date: this.date, exercise: this.exercise, mode: this.mode,
       goal: { ...this.goal }, conditions: this.conditions.trim(), duration: Math.max(0, (now - this.startAt) / 1000),
-      metadata: { rulesVersion: RULES_VERSION, analysisVersion: ANALYSIS_VERSION, coachingVersion: COACHING_POLICY_VERSION,
-        variant: { ...variant(this.exercise) }, tracking: { ...tracking }, detector: this.mode === 'demo' ? 'synthetic-landmarks-v1' : 'MediaPipe 1.0.1 / pose_landmarker_lite',
+      metadata: { rulesVersion: isLegacy(this.exercise) ? RULES_VERSION : MULTI_RULES_VERSION, analysisVersion: ANALYSIS_VERSION, coachingVersion: COACHING_POLICY_VERSION,
+        variant: { ...variant(this.exercise) }, tracking: isLegacy(this.exercise) ? { ...tracking } : { ...multiTiming },
+        ...(!isLegacy(this.exercise) ? {exerciseSnapshot:structuredClone(this.exerciseSnapshot)} : {}), detector: this.mode === 'demo' ? 'synthetic-landmarks-v1' : 'MediaPipe 1.0.1 / pose_landmarker_lite',
         sampling: 'realtime-throttled-85ms-v1', ...(this.source ? { source: structuredClone(this.source) } : {}) },
       sets: structuredClone(this.sets),
     };

@@ -1,3 +1,6 @@
+import { ExerciseGuide, ExerciseOptionsFields, HoldSummary, SideSummary } from './ExerciseSetup';
+import { exerciseRegistry, isHold, isLegacy, optionsFor, criterionName } from '../exercises/registry';
+import { goalValue, resultValue, validExerciseGoal, type TrainingGoal as Goal } from '../../shared/workout';
 import { useEffect, useMemo, useState } from 'react';
 import { useAccount } from '../account/context';
 import { AccountPersistence, type TrainingPersistence } from '../account/api';
@@ -13,6 +16,7 @@ import { downloadJson } from '../training/history';
 import { WorkoutDetails } from './HistoryView';
 import { Icon } from './Icon';
 import { RewardNotice } from '../account/ProgressionViews';
+import type { DemoScenario } from '../pose/demo';
 
 
 interface Props {
@@ -34,9 +38,14 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
   const accountPersistence = useMemo(() => user ? new AccountPersistence(user.id) : undefined, [user?.id]);
   const persistence = programStep?.persistence ?? accountPersistence;
   const [videoUrl, setVideoUrl] = useState('');
-  const [goalFields, setGoalFields] = useState(programStep ? {sets:String(programStep.goal.sets),reps:String(programStep.goal.reps),restSeconds:String(programStep.goal.restSeconds)} : { sets: '', reps: '', restSeconds: '' });
+  const [demoScenario,setDemoScenario]=useState<DemoScenario>('normal');
+  const [goalFields, setGoalFields] = useState(programStep ? {sets:String(programStep.goal.sets),reps:String(goalValue(programStep.goal)),restSeconds:String(programStep.goal.restSeconds)} : { sets: '', reps: '', restSeconds: '' });
   const [conditions, setConditions] = useState(programStep?.conditions ?? '');
-  const goal = { sets: Number(goalFields.sets || NaN), reps: Number(goalFields.reps || NaN), restSeconds: Number(goalFields.restSeconds || NaN) };
+  const [options,setOptions]=useState(()=>optionsFor(exercise,programStep?.goal.options));
+  const hold=isHold(exercise), def=exerciseRegistry[exercise];
+  const base={sets:Number(goalFields.sets||NaN),restSeconds:Number(goalFields.restSeconds||NaN)};
+  const goal:Goal=programStep?.goal ?? (hold?{...base,schemaVersion:2,unit:'seconds',seconds:Number(goalFields.reps||NaN),options}:{...base,reps:Number(goalFields.reps||NaN),...(!isLegacy(exercise)?{schemaVersion:2,unit:'reps',options} as const:{})});
+  const goalIsValid=validGoal(goal)&&validExerciseGoal(exercise,goal);
   useEffect(
     () => () => {
       if (videoUrl) URL.revokeObjectURL(videoUrl);
@@ -59,7 +68,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
     seek,
     restart,
     phase, setNumber, restSeconds, pause, resume, endSet, saveError, saving, retrySave, reward,
-  } = useTraining({ exercise, mode, videoUrl, goal, conditions, persistence });
+  } = useTraining({ exercise, mode, videoUrl, goal, conditions, persistence, demoScenario });
   const {
     enabled: voiceEnabled,
     setEnabled: setVoiceEnabled,
@@ -85,7 +94,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
           {labels[exercise]} · {readable(session.duration)} ·{' '}
           {mode === 'demo' ? 'Демо' : mode === 'video' ? 'Видеофайл' : 'Камера'}
         </p>
-        <div className='result-grid'>
+        {hold?<HoldSummary result={result} exercise={exercise}/>:<div className='result-grid'>
           <div className='result-tile'>
             <span>Полные повторы</span>
             <strong>{result.reps}</strong>
@@ -102,9 +111,10 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
             <span>Не удалось оценить</span>
             <strong>{result.unassessed}</strong>
           </div>
-        </div>
+        </div>}
+        <SideSummary result={result}/>
         {!saving && !saveError && <RewardNotice reward={reward} guest={!persistence}/>}
-        <div className='recommend'>
+        {!hold&&<div className='recommend'>
           <span className='recommend-symbol'>✦</span>
           <div>
             <b>Одна задача на следующий подход</b>
@@ -112,13 +122,14 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
             <p>Без замечаний по проверенным критериям: {result.withoutFindings} полных повторов.</p>
           </div>
         </div>
-        <details className='criterion-summary' aria-label='Результаты по критериям'>
+        }
+        {!hold&&<details className='criterion-summary' aria-label='Результаты по критериям'>
           <summary>Что удалось проверить</summary>
           <p>Предварительные критерии. Это результаты наблюдений, а не процент техники.</p>
           {result.attempts.length ? <ul className='criterion-list'>{Object.entries(criterionTotals(result)).map(([code, total]) => <li key={code}>
-            <b>{criterionLabels[code as FeedbackCode]}</b>: выполнен в {total.passed}, отклонение в {total.deviation}, не оценён в {total.unassessed} попытках.
+            <b>{isLegacy(exercise)?criterionLabels[code as FeedbackCode]:criterionName(exercise,code as FeedbackCode)}</b>: выполнен в {total.passed}, отклонение в {total.deviation}, не оценён в {total.unassessed} попытках.
           </li>)}</ul> : <p>Попыток для проверки пока нет.</p>}
-        </details>
+        </details>}
         {result.attempts.length > 0 && (
           <section className='attempt-report' aria-label='Разбор попыток'>
             <h2>Разбор попыток</h2>
@@ -127,6 +138,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
             ))}
           </section>
         )}
+        {hold&&<p>Удержания пока не входят в механику XP и соревнований.</p>}
         <div className='result-actions'>
           <button className='button' onClick={() => downloadJson({ schemaVersion: 1, records: [session] }, 'playfit-workout.json')}>Экспорт результата JSON</button>
           {saveError && <button className='button' disabled={saving} onClick={retrySave}>Повторить сохранение</button>}
@@ -166,7 +178,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
       </div>
       {programStep && !started && <button className='button' disabled={starting} onClick={onHome}>Прервать программу до запуска шага</button>}
       {started && <section className='session-controls' aria-label='Управление сессией'>
-        <p role='status'><b>{phaseLabels[phase]}</b> · Подход {setNumber}/{goal.sets} · {phase === 'next' ? `Цель следующего: ${goal.reps} полных` : `В текущем: ${analysis.result.reps}/${goal.reps} полных`}{phase === 'rest' ? ` · осталось ${restSeconds} с` : ''}</p>
+        <p role='status'><b>{phaseLabels[phase]}</b> · Подход {setNumber}/{goal.sets} · {phase === 'next' ? `Цель следующего: ${goalValue(goal)} ${hold?'с':'повт.'}` : `В текущем: ${resultValue(analysis.result).toFixed(hold?1:0)}/${goalValue(goal)} ${hold?'с':'повт.'}`}{phase === 'rest' ? ` · осталось ${restSeconds} с` : ''}</p>
         {!accepting && <p>Движения не учитываются, технические подсказки выключены. Перед продолжением снова удерживайте исходную позицию.</p>}
         {accepting && <button className='button' onClick={pause}>Пауза</button>}
         {(phase === 'paused' || phase === 'next') && <button className='button button-primary' onClick={() => void resume()}>{phase === 'next' ? 'Начать следующий подход' : 'Продолжить с подготовки'}</button>}
@@ -243,7 +255,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
                 <button
                   className='button button-primary'
                   onClick={() => void start()}
-                  disabled={starting || !validGoal(goal) || (mode === 'video' && !videoUrl)}
+                  disabled={starting || !goalIsValid || (mode === 'video' && !videoUrl)}
                 >
                   {starting ? 'Подготовка…' : mode === 'camera'
                     ? 'Разрешить доступ к камере'
@@ -252,7 +264,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
                       : 'Запустить демо'}{' '}
                   <Icon name='arrow' />
                 </button>
-                {!validGoal(goal) && <small>Сначала заполни три поля в блоке «Твой план».</small>}
+                {!goalIsValid && <small>Сначала заполни три поля в блоке «Твой план».</small>}
               </div>
             )}
           </div>
@@ -263,21 +275,24 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
           </div>
         </section>
         <aside className='dashboard'>
+      {!started&&mode==='demo'&&<fieldset className='exercise-options' disabled={starting}><legend>Синтетическое демо</legend><label>Сценарий симуляции<select value={demoScenario} onChange={e=>setDemoScenario(e.target.value as DemoScenario)}><option value='normal'>Полный цикл / удержание</option><option value='occlusion'>Перекрытие обязательных точек</option><option value='no_pose'>Человек пропал из кадра</option><option value='source_gap'>Остановка источника</option></select></label><p className='fine-print'>Пропуск искусственно задан на 2,4–4,3 с каждого 9-секундного отрезка. Это проверка интерфейса, без камеры.</p></fieldset>}
+      {!started&&!isLegacy(exercise)&&<ExerciseOptionsFields exercise={exercise} value={options} onChange={setOptions} disabled={starting||!!programStep}/>}
       {!started && <fieldset className='session-goal' disabled={starting || !!programStep}>
         <legend>Твой план</legend>
         <p className='goal-intro'>Цель выбираешь ты. Мы поможем следить за счётом.</p>
         <div className='goal-fields'>
           <label>Подходы<input type='number' inputMode='numeric' placeholder='1–100' min='1' max='100' step='1' value={goalFields.sets} onChange={e => setGoalFields(v => ({ ...v, sets: e.target.value }))} /></label>
-          <label>Повторы в подходе<input type='number' inputMode='numeric' placeholder='1–1000' min='1' max='1000' step='1' value={goalFields.reps} onChange={e => setGoalFields(v => ({ ...v, reps: e.target.value }))} /></label>
+          <label>{hold?'Удержание в подходе, с':'Повторы в подходе'}<input type='number' inputMode='numeric' placeholder={hold?'1–3600':'1–1000'} min='1' max={hold?'3600':'1000'} step='1' value={goalFields.reps} onChange={e => setGoalFields(v => ({ ...v, reps: e.target.value }))} /></label>
           <label>Отдых, секунды<input type='number' inputMode='numeric' placeholder='0–3600' min='0' max='3600' step='1' value={goalFields.restSeconds} onChange={e => setGoalFields(v => ({ ...v, restSeconds: e.target.value }))} /></label>
         </div>
         <details className='plan-details'><summary>Условия съёмки и правила подсчёта <span>Необязательно</span></summary>
           <label>Условия съёмки для сравнения<input type='text' maxLength={200} value={conditions} placeholder='Например: комната, камера сбоку, дневной свет' onChange={e => setConditions(e.target.value)} /></label>
-          <p>В цель входят только полные оценённые циклы. Неполные и неоценённые попытки сохраняются отдельно. При достижении цели подход завершится автоматически.</p>
+          <p>{hold?'В цель входят только наблюдаемые интервалы удержания с выполненными критериями.':'В цель входят только полные оценённые циклы.'} Неполные и неоценённые попытки сохраняются отдельно. При достижении цели подход завершится автоматически.</p>
           <p>Для сравнения тренировок укажи одинаковые условия съёмки. {user ? 'Результаты сохраняются в локальной серверной базе аккаунта.' : 'Гостевые результаты хранятся в этом браузере.'} Видео и поток точек не отправляются на сервер. Цель — твой выбор, а не рекомендация нагрузки.</p>
         </details>
-        {Object.values(goalFields).some(Boolean) && !validGoal(goal) && <p className='field-hint'>Заполни три поля целыми числами в указанных диапазонах.</p>}
+        {Object.values(goalFields).some(Boolean) && !goalIsValid && <p className='field-hint'>Заполни три поля целыми числами в указанных диапазонах.</p>}
       </fieldset>}
+          {exercise !== 'squat'&&(!started?<ExerciseGuide exercise={exercise}/>:<details className='exercise-instructions'><summary>Инструкция и расположение камеры</summary><ExerciseGuide exercise={exercise}/></details>)}
           {exercise === 'squat' && mode !== 'demo' && (!started || analysis.preparation.stage !== 'active') && <section className='camera-guide' aria-label='Подготовка камеры для приседаний сбоку'>
             <strong>Приседания без веса · съёмка сбоку</strong>
             <svg viewBox='0 0 320 125' role='img' aria-label='Камера на уровне таза направлена на человека в профиль; плечо, таз, колено и лодыжка остаются в кадре'>
@@ -296,6 +311,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
               {analysis.preparation.view === 'unknown' && !analysis.preparation.viewConfirmed && analysis.observation.status === 'ready' && <button className='button' onClick={confirmSideView}>Подтверждаю съёмку сбоку по примеру</button>}
             </>}
           </section>}
+          {started&&accepting&&!isLegacy(exercise)&&def.view==='side'&&analysis.observation.status==='ready'&&analysis.preparation.view==='unknown'&&!analysis.preparation.viewConfirmed&&<button className='button' onClick={confirmSideView}>Подтверждаю съёмку сбоку по схеме</button>}
           <div className='dashboard-title'>
             <span>ПАНЕЛЬ ТРЕНИРОВКИ</span>
             <button
@@ -333,29 +349,31 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
                 : 'Звук недоступен'}
             </button>
           </div>
-          <p className='variant-note'>{exercise === 'squat' ? 'Без веса · Вид сбоку' : 'Отжимания · Вид сбоку'} · Предварительные правила</p>
+          <p className='variant-note'>{def.equipment} · {def.view==='side'?'Вид сбоку':'Вид спереди'} · {options.variant==='seated'?'Сидя':options.variant==='standing'?'Стоя':'Основной вариант'} · Предварительные правила</p>
           <div className='rep-block'>
-            <span className='metric-label'>{phase === 'rest' || phase === 'next' ? 'ПОЛНЫЕ В ПРЕДЫДУЩЕМ ПОДХОДЕ' : 'ПОВТОРЕНИЯ'}</span>
+            <span className='metric-label'>{hold?'ЗАСЧИТАННЫЕ СЕКУНДЫ':phase === 'rest' || phase === 'next' ? 'ПОЛНЫЕ В ПРЕДЫДУЩЕМ ПОДХОДЕ' : 'ПОВТОРЕНИЯ'}</span>
             <div className='rep-value'>
-              {pad(analysis.result.reps)}
-              <span className='rep-suffix'> / {validGoal(goal) ? goal.reps : '—'}</span>
+              {hold?resultValue(analysis.result).toFixed(1):pad(analysis.result.reps)}
+              <span className='rep-suffix'> / {goalIsValid ? goalValue(goal) : '—'}</span>
             </div>
             <div className='progress-track'>
               <div
                 style={{
-                  width: `${Math.min(100, analysis.result.reps / goal.reps * 100) || 0}%`,
+                  width: `${Math.min(100, resultValue(analysis.result) / goalValue(goal) * 100) || 0}%`,
                 }}
               />
             </div>
-            <small>Полные циклы {phase === 'rest' || phase === 'next' ? 'предыдущего' : 'текущего'} подхода · цель {validGoal(goal) ? goal.reps : 'не задана'}</small>
+            <small>{hold?'Засчитанные секунды':'Полные циклы'} {phase === 'rest' || phase === 'next' ? 'предыдущего' : 'текущего'} подхода · цель {goalIsValid ? goalValue(goal) : 'не задана'}</small>
           </div>
+          <SideSummary result={analysis.result}/>
+          {hold&&analysis.result.hold&&<p>Непрерывно до {(analysis.result.hold.longestMs/1000).toFixed(1)} с · Отклонения {(analysis.result.hold.deviationMs/1000).toFixed(1)} с · Не оценено {(analysis.result.hold.unassessedMs/1000).toFixed(1)} с</p>}
           <div className='mini-metrics'>
             <div>
               <span className='metric-label'>ФАЗА ДВИЖЕНИЯ</span>
               <strong>{!started ? 'Ожидание' : accepting ? analysis.state : phaseLabels[phase]}</strong>
             </div>
             <div>
-              <span className='metric-label'>УГОЛ СУСТАВА</span>
+              <span className='metric-label'>{exercise==='side_bend'?'НАКЛОН КОРПУСА':exercise==='glute_bridge'?'УГОЛ ПЛЕЧО–ТАЗ–КОЛЕНО':exercise==='forearm_plank'?'ЛИНИЯ ТЕЛА':!isLegacy(exercise)&&['front_hold','overhead_press','lateral_raise'].includes(exercise)?'МЕНЬШИЙ УГОЛ ПОДЪЁМА РУК':'УГОЛ КОЛЕНА / ЛОКТЯ'}</span>
               <strong>
                 {started && accepting && analysis.angle !== null
                   ? `${analysis.angle}°`
@@ -363,11 +381,12 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
               </strong>
             </div>
           </div>
+          {accepting&&analysis.metrics?.leftArm!==undefined&&<details className='exercise-instructions'><summary>Измерения обеих рук</summary><p>Левая: угол подъёма {Math.round(analysis.metrics.leftArm)}°, локоть {Math.round(analysis.metrics.leftElbow)}°.</p><p>Правая: угол подъёма {Math.round(analysis.metrics.rightArm)}°, локоть {Math.round(analysis.metrics.rightElbow)}°.</p></details>}
           <div className='score-row'>
             <div>
               <span className='metric-label'>НАБЛЮДЕНИЕ</span>
               <strong>{!started ? 'Ожидание' : !accepting ? 'Наблюдение приостановлено' : analysis.observation.status === 'ready' ? 'Нужные точки видны' : 'Недостаточно данных'}</strong>
-              <small>Неполных: {analysis.result.incomplete} · Не оценено: {analysis.result.unassessed} · С замечаниями: {analysis.result.withErrors}</small>
+              {!hold&&<small>Неполных: {analysis.result.incomplete} · Не оценено: {analysis.result.unassessed} · С замечаниями: {analysis.result.withErrors}</small>}
             </div>
           </div>
           <div className='feedback'>

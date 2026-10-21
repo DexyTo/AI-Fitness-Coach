@@ -1,8 +1,9 @@
+import type { ExerciseType } from '../exercises/types';
 import type { ReactNode } from 'react';
 
-type IconName = 'arrow' | 'camera' | 'play' | 'video' | 'squat' | 'pushup' | 'check' | 'history' | 'shield' | 'activity' | 'star' | 'copy' | 'up' | 'down' | 'trash' | 'flag';
+type IconName = ExerciseType | 'arrow' | 'camera' | 'play' | 'video' | 'squat' | 'pushup' | 'check' | 'history' | 'shield' | 'activity' | 'star' | 'copy' | 'up' | 'down' | 'trash' | 'flag';
 
-const paths: Record<IconName, ReactNode> = {
+const paths: Partial<Record<IconName, ReactNode>> = {
   flag: <path d='M5 21V3m0 1c5-4 9 4 14 0v10c-5 4-9-4-14 0'/>,
   star: <path d='m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z' />,
   copy: <><rect x='8' y='8' width='13' height='13' rx='2'/><path d='M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3'/></>,
@@ -22,5 +23,5 @@ const paths: Record<IconName, ReactNode> = {
 };
 
 export function Icon({ name, className = '' }: { name: IconName; className?: string }) {
-  return <svg className={`icon ${className}`} width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>{paths[name]}</svg>;
+  return <svg className={`icon ${className}`} width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>{paths[name] ?? <><circle cx='12' cy='4' r='2'/><path d='M12 8v6m-6-4 6 2 6-2m-6 4-4 7m4-7 4 7'/></>}</svg>;
 }

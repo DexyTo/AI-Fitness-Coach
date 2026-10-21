@@ -1,3 +1,4 @@
+import { isLegacy, exerciseRegistry } from './registry';
 import { observePose, criterionPoints, visible } from '../pose/landmarks';
 import { variant } from './config';
 import { reasonText, type ExerciseAnalysisResult, type ExerciseResult, type ExerciseType,
@@ -43,6 +44,10 @@ export class CoachingController {
   }
   constructor(private readonly exercise: ExerciseType) {}
   update(analysis: ExerciseAnalysisResult, points: PoseLandmarks, aspect: number, now: number): CoachingCue {
+    if (!isLegacy(this.exercise)) {
+      if (analysis.observation.status !== 'ready'||analysis.state==='Оценка приостановлена') return { key:'observation', kind:'observation', message:analysis.preparation.message };
+      return { key:analysis.feedback[0]?.message??analysis.state,kind:analysis.feedback.length?'technique':'phase',message:analysis.feedback[0]?.message||analysis.preparation.message };
+    }
     if (this.lastAt !== null && (now < this.lastAt || now - this.lastAt > 700)) this.reset();
     this.lastAt = now;
     const context = `${analysis.result.attempts.length}:${analysis.state}:${analysis.preparation.stage}:${analysis.observation.side}`;
@@ -102,6 +107,7 @@ export class CoachingController {
 }
 
 export function attemptExplanation(attempt: MovementAttempt, exercise: ExerciseType): string {
+  if (!isLegacy(exercise)) return attempt.outcome === 'complete' ? 'Засчитано: наблюдались исходная позиция, цель и возврат. Замечания учтены отдельно.' : attempt.outcome === 'incomplete' ? 'Не засчитано: целевая амплитуда или возврат не подтверждены.' : 'Не засчитано: обязательные наблюдения прерваны.';
   if (attempt.outcome === 'insufficient_data') return 'Не засчитано: в обязательных проверках есть пропуски. Это не оценка техники.';
   const joint = exercise === 'squat' ? 'колена' : 'локтя';
   const reasons = [];
@@ -113,6 +119,14 @@ export function attemptExplanation(attempt: MovementAttempt, exercise: ExerciseT
 }
 
 export function attemptMeasurements(attempt: MovementAttempt, exercise: ExerciseType) {
+  if (!isLegacy(exercise)) {
+    const m=attempt.measurements??{},n=(value:number|undefined)=>Number.isFinite(value)?Math.round(value!)+'°':'нет данных';
+    const amplitude=exercise==='reverse_lunge'?'Минимальный угол переднего колена: '+n(m.minKnee)
+      :exercise==='glute_bridge'?'Наибольший угол плечо–таз–колено: '+n(m.peakHipAngle)
+      :exercise==='side_bend'?'Наибольший направленный наклон '+(attempt.side==='left'?'влево':'вправо')+': '+n(m.peakTilt)
+      :(['left','right'] as const).map(side=>(side==='left'?'Левая':'Правая')+' рука: угол подъёма '+n(m[side+'PeakArm'])+', цель '+(m[side+'Target']?'подтверждена':'не подтверждена')+', возврат '+(m[side+'Returned']?'подтверждён':'не подтверждён')).join('; ');
+    return {amplitude:(attempt.reasons.length?'Частичные наблюдения; пропуски перечислены ниже. ':'')+amplitude,duration:((attempt.endedAt-attempt.startedAt)/1000).toFixed(1)};
+  }
   if (attempt.outcome === 'insufficient_data' || attempt.reasons.length) return null;
   return {
     amplitude: `Нижняя точка амплитуды: минимальный 2D-угол ${exercise === 'squat' ? 'колена' : 'локтя'} ${attempt.minAngle}°`,
@@ -130,6 +144,7 @@ export function criterionTotals(result: ExerciseResult) {
 }
 
 export function nextTask(result: ExerciseResult, exercise: ExerciseType): string {
+  if (!isLegacy(exercise)) return exerciseRegistry[exercise].camera;
   const assessed = result.attempts.filter(a => a.outcome !== 'insufficient_data');
   if (assessed.length < 2 || assessed.length < result.attempts.length / 2)
     return 'Следующая задача: настройте съёмку сбоку так, чтобы нужная сторона тела оставалась целиком видна в двух последовательных попытках.';

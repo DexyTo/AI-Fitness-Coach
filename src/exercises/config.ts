@@ -31,4 +31,4 @@ export const exerciseVariants = {
   pushup: { id: 'pushup-side', lowerAngle: 98, upperAngle: 158, bodyLineDeviation: 27 },
 } as const;
 
-export function variant(exercise: ExerciseType) { return exerciseVariants[exercise]; }
+export function variant(exercise: ExerciseType) { return exercise === 'squat' || exercise === 'pushup' ? exerciseVariants[exercise] : { id: exercise, lowerAngle: 0, upperAngle: 180 }; }

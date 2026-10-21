@@ -1,5 +1,5 @@
 import type { ChallengeReceipt } from './challenges.js';
-export type RewardReason = 'awarded' | 'daily_limit' | 'demo' | 'video' | 'incomplete' | 'legacy' | 'import';
+export type RewardReason = 'awarded' | 'daily_limit' | 'demo' | 'video' | 'incomplete' | 'legacy' | 'import' | 'unsupported_hold';
 export interface RewardReceipt {
   reason: RewardReason; xp: number; earnedAt: string | null; achievements: string[];
   challenge?: ChallengeReceipt;
@@ -13,6 +13,7 @@ export interface Progression {
   achievements: { id: string; title: string; description: string; target: number; progress: number; earnedAt: string | null; reward: string }[];
 }
 export const rewardMessages: Record<RewardReason, string> = {
+  unsupported_hold:'Удержания сохраняются в истории. Правила XP v1 и соревнований пока не поддерживают цели в секундах; эта тренировка не даёт наград.',
   awarded: 'Цель выполнена. Награда сохранена в аккаунте.',
   daily_limit: 'Дневной предел XP за тренировки достигнут. Тренировка учтена в активности и достижениях.',
   demo: 'Синтетическое демо не даёт XP и прогресс достижений.',

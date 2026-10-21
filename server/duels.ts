@@ -106,6 +106,7 @@ export function registerDuels(app: FastifyInstance, db: Database.Database, requi
         finalizeDuel(db, previous.id, new Date().toISOString());
         return { existing: true, duel: duelView(db, previous.id, user.id) };
       }
+      if(program.steps.some(s=>s.goal.unit==='seconds'))fail(400,'UNSUPPORTED_UNIT','Удержания не входят в правила дуэлей v1.');
       const template = availablePrograms(db, null).find(p => p.id === program.id && p.origin === 'catalog');
       const identity = (p: ProgramPlan) => ({ ...p, steps: p.steps.map(s => ({ id: s.id, exercise: s.exercise })) });
       if (!validPlan(program) || !template || !same(identity(program), identity(template))) fail(409, 'PROGRAM_CHANGED', 'Выбери актуальную программу из каталога.');

@@ -1,6 +1,10 @@
-export type ExerciseType = 'squat' | 'pushup';
+export const exerciseIds = ['squat', 'pushup', 'reverse_lunge', 'forearm_plank', 'glute_bridge', 'wall_sit', 'overhead_press', 'front_hold', 'side_bend', 'lateral_raise'] as const;
+export type ExerciseType = typeof exerciseIds[number];
+export type LegacyExercise = 'squat' | 'pushup';
+export type BodySide = 'left' | 'right';
+export interface ExerciseOptions { variant: 'standard' | 'standing' | 'seated'; side: BodySide; facing: 'left' | 'right'; weightKg?: number }
 export type InputMode = 'camera' | 'demo' | 'video';
-export type ExerciseState = 'Подготовка' | 'Готов' | 'Опускаетесь' | 'Нижняя точка' | 'Поднимаетесь' | 'Оценка приостановлена';
+export type ExerciseState = 'Подготовка' | 'Готов' | 'Опускаетесь' | 'Нижняя точка' | 'Поднимаетесь' | 'Оценка приостановлена' | 'Движение' | 'Целевая позиция' | 'Возврат' | 'Шаг назад' | 'Удержание';
 export type FeedbackCode = 'depth' | 'lean' | 'extension' | 'line';
 export interface ExerciseFeedback { code: FeedbackCode; message: string }
 export interface PosePoint {
@@ -43,8 +47,15 @@ export interface MovementAttempt {
   criteria: CriterionResults;
   remarks: FeedbackCode[];
   reasons: ObservationReason[];
+  side?: BodySide;
+  measurements?: Record<string, number>;
 }
+export interface HoldInterval { startedAt: number; endedAt: number; status: 'credited' | 'deviation' | 'unassessed'; criteria: CriterionResults; reasons: ObservationReason[] }
+export interface HoldResult { creditedMs: number; longestMs: number; deviationMs: number; unassessedMs: number; intervals: HoldInterval[] }
 export interface ExerciseResult {
+  kind?: 'repetitions' | 'hold';
+  hold?: HoldResult;
+  sides?: Record<BodySide, number>;
   reps: number;
   incomplete: number;
   unassessed: number;
@@ -55,6 +66,7 @@ export interface ExerciseResult {
   attempts: MovementAttempt[];
 }
 export interface ExerciseAnalysisResult {
+  metrics?: Record<string,number>;
   preparation: {
     stage: 'preparing' | 'ready' | 'active' | 'recovering';
     view: 'side' | 'unsuitable' | 'unknown' | 'not_required';
@@ -77,7 +89,7 @@ export interface ExerciseAnalyzer {
   finish(timestamp: number): ExerciseAnalysisResult;
   snapshot(): ExerciseAnalysisResult;
 }
-export const labels: Record<ExerciseType, string> = { squat: 'Приседания', pushup: 'Отжимания' };
+export const labels: Record<ExerciseType, string> = { squat: 'Приседания', pushup: 'Отжимания', reverse_lunge: 'Выпады назад', forearm_plank: 'Планка на предплечьях', glute_bridge: 'Ягодичный мостик', wall_sit: 'Стульчик у стены', overhead_press: 'Жим гантелей над головой', front_hold: 'Удержание гантелей перед собой', side_bend: 'Боковые наклоны с гантелями', lateral_raise: 'Подъёмы гантелей в стороны' };
 export const criterionLabels: Record<FeedbackCode, string> = {
   depth: 'Нижняя точка', extension: 'Возврат к выпрямлению', lean: 'Наклон корпуса', line: 'Линия тела',
 };

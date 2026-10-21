@@ -9,7 +9,7 @@ import type {
 import { createAnalyzer } from '../exercises/analyzer';
 import { tracking } from '../exercises/config';
 import { CoachingController, type CoachingCue } from '../exercises/coaching';
-import { demoPose } from '../pose/demo';
+import { demoObservation, type DemoScenario } from '../pose/demo';
 import { clearPose, drawPose } from '../pose/drawing';
 import { closeDetector, getDetectorWithMetadata } from '../pose/poseDetector';
 import { VideoTimeline } from '../pose/videoTimeline';
@@ -26,12 +26,13 @@ interface Options {
   goal: TrainingGoal;
   conditions: string;
   persistence?: TrainingPersistence;
+  demoScenario?:DemoScenario;
 }
 
-export function useTraining({ exercise, mode, videoUrl, goal, conditions, persistence }: Options) {
+export function useTraining({ exercise, mode, videoUrl, goal, conditions, persistence, demoScenario='normal' }: Options) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const analyzerRef = useRef(createAnalyzer(exercise));
+  const analyzerRef = useRef(createAnalyzer(exercise, goal.options));
   const coachingRef = useRef(new CoachingController(exercise));
   const [cue, setCue] = useState<CoachingCue | null>(null);
   const [analysis, setAnalysis] = useState<ExerciseAnalysisResult>(() =>
@@ -102,6 +103,10 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions, persis
     },
     [stop],
   );
+  useEffect(()=>{
+    const hidden=()=>{if(document.hidden&&controllerRef.current?.acceptsFrames){controllerRef.current.pause(analysisTime.current);setPhase('paused');setCue(null);coachingRef.current.reset();setStatus('Вкладка скрыта. Продолжите с новой подготовки.');}};
+    document.addEventListener('visibilitychange',hidden);return()=>document.removeEventListener('visibilitychange',hidden);
+  },[]);
   const finish = () => {
     const controller = controllerRef.current;
     if (!controller) return;
@@ -161,7 +166,7 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions, persis
     cancelRef.current = false;
     setStarting(true);
     setStatus(mode === 'demo' ? 'Запуск демо' : 'Подготовка модели...');
-    analyzerRef.current = createAnalyzer(exercise);
+    analyzerRef.current = createAnalyzer(exercise, goal.options);
     setAnalysis(analyzerRef.current.snapshot());
     setSeconds(0);
     setSession(null);
@@ -211,7 +216,7 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions, persis
       controllerRef.current = new TrainingController(exercise, mode, goal, conditions, startAt.current, run?.createdAt, run?.id, {
         width: mode === 'demo' ? 1600 : video?.videoWidth ?? 0,
         height: mode === 'demo' ? 1000 : video?.videoHeight ?? 0,
-        delegate: detection?.delegate ?? 'synthetic', settings: detection ? { ...detection.settings } : {},
+        delegate: detection?.delegate ?? 'synthetic', settings: detection ? { ...detection.settings } : {demoScenario},
       });
       analyzerRef.current = controllerRef.current.analyzer;
       syncController();
@@ -260,7 +265,10 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions, persis
         const width = canvas.clientWidth,
           height = canvas.clientHeight;
         // Demo has a fixed source aspect, independent of responsive viewport dimensions.
-        if (mode === 'demo') points = demoPose(exercise, now - startAt.current);
+        if (mode === 'demo') {
+          const simulated=demoObservation(exercise,now-startAt.current,demoScenario,goal.options);
+          points=simulated.points;sourceReason=simulated.sourceReason;
+        }
         else if (
           video &&
           video.readyState >= 2 &&
@@ -370,7 +378,7 @@ export function useTraining({ exercise, mode, videoUrl, goal, conditions, persis
       controllerRef.current = null;
       finalRecord.current = null;
       setPhase('preparing');
-      analyzerRef.current = createAnalyzer(exercise);
+      analyzerRef.current = createAnalyzer(exercise, goal.options);
       setAnalysis(analyzerRef.current.snapshot());
       setSession(null);
       setSeconds(0);

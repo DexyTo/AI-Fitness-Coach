@@ -11,8 +11,8 @@ export function demoRecord(id: string, date: string, snapshot: ProgramSnapshot, 
       variant: { id: 'fixture', lowerAngle: 90, upperAngle: 170 }, tracking: { frames: 0 } },
     sets: Array.from({ length: s.goal.sets }, (_, set) => ({ number: set + 1, ended: 'completed', durationMs: 0,
       observation: { readyMs: 0, partialMs: 0, unavailableMs: 0, sampledMs: 0, sideViewConfirmed: false },
-      result: { reps: s.goal.reps, incomplete: 0, unassessed: 0, withoutFindings: s.goal.reps, withErrors: 0, errors: {},
-        attempts: Array.from({ length: s.goal.reps }, (_, i) => ({ id: i + 1, startedAt: 0, endedAt: 0, outcome: 'complete', endReason: 'returned_to_top', motionComplete: true, minAngle: 90, remarks: [], reasons: [],
+      result: { reps: s.goal.reps??0, incomplete: 0, unassessed: 0, withoutFindings: s.goal.reps??0, withErrors: 0, errors: {},
+        attempts: Array.from({ length: s.goal.reps??0 }, (_, i) => ({ id: i + 1, startedAt: 0, endedAt: 0, outcome: 'complete', endReason: 'returned_to_top', motionComplete: true, minAngle: 90, remarks: [], reasons: [],
           criteria: Object.fromEntries(['depth', 'extension', s.exercise === 'squat' ? 'lean' : 'line'].map(key => [key, { status: 'passed', observedFrames: 0, reasons: [] }])) })) } })),
   }));
   const record: ProgramRecord = { ...snapshot, schemaVersion: 2, id, date, duration: 0, ended: fraction === 1 ? 'completed' : 'interrupted', steps };

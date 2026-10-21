@@ -27,9 +27,10 @@ export const duelOutcomes: Record<DuelOutcome, string> = { win: 'Победа', 
 // Equal weight per step, cap EACH set, then round once for a stable comparison.
 export function duelScore(record: ProgramRecord, rules = DUEL_RULES): number {
   if (rules.version !== 'duels-v1' || rules.formula !== DUEL_RULES.formula || rules.scale !== 10000) throw Error('Unknown duel scoring rules');
+  if(record.program.steps.some(s=>s.goal.unit==='seconds'))throw Error('Удержания не поддерживаются правилами дуэли v1');
   const fractions = record.program.steps.map((step, i) => {
-    const reps = record.steps[i]?.sets.slice(0, step.goal.sets).reduce((n, set) => n + Math.min(set.result.reps, step.goal.reps), 0) ?? 0;
-    return reps / (step.goal.sets * step.goal.reps);
+    const reps = record.steps[i]?.sets.slice(0, step.goal.sets).reduce((n, set) => n + Math.min(set.result.reps, (step.goal.reps??0)), 0) ?? 0;
+    return reps / (step.goal.sets * (step.goal.reps??1));
   });
   return Math.round(10000 * fractions.reduce((a, b) => a + b, 0) / fractions.length);
 }

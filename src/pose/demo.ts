@@ -1,3 +1,16 @@
+import { exerciseDemo } from './exerciseDemo';
+import { isLegacy } from '../exercises/registry';
+import type { ExerciseOptions } from '../exercises/types';
+export type DemoScenario = 'normal' | 'occlusion' | 'no_pose' | 'source_gap';
+export function demoObservation(type:ExerciseType,elapsedMs:number,scenario:DemoScenario='normal',options?:Partial<ExerciseOptions>): {points:PoseLandmarks;sourceReason?:'source_unavailable'} {
+  const points=demoPose(type,elapsedMs,options),time=elapsedMs%9000;
+  if(time>=2400&&time<4300) {
+    if(scenario==='no_pose')return {points:[]};
+    if(scenario==='source_gap')return {points:[],sourceReason:'source_unavailable'};
+    if(scenario==='occlusion')for(const i of [11,12])points[i].visibility=0;
+  }
+  return {points};
+}
 import type {
   ExerciseType,
   PoseLandmarks,
@@ -9,7 +22,8 @@ function point(x: number, y: number): PosePoint {
 }
 
 // A generated sequence of landmarks. The demo is explicitly a simulation, never attributed to the ML model.
-export function demoPose(type: ExerciseType, elapsedMs: number): PoseLandmarks {
+export function demoPose(type: ExerciseType, elapsedMs: number, options?:Partial<ExerciseOptions>): PoseLandmarks {
+  if(!isLegacy(type))return exerciseDemo(type,elapsedMs,options);
   const t = (elapsedMs % 3600) / 3600;
   const ease = (v: number) => v * v * (3 - 2 * v);
   const depth =

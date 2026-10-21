@@ -1,7 +1,7 @@
 import type {
   PoseLandmarks,
   PosePoint,
-  ExerciseType,
+  LegacyExercise,
   FeedbackCode,
   CriterionResults,
   ObservationQuality,
@@ -72,7 +72,7 @@ export function sideView(points: PoseLandmarks, aspect: number): 'side' | 'unsui
   return 'unknown';
 }
 
-export function criterionPoints(exercise: ExerciseType, side: BodySide): Partial<Record<FeedbackCode, number[]>> {
+export function criterionPoints(exercise: LegacyExercise, side: BodySide): Partial<Record<FeedbackCode, number[]>> {
   const offset = side === 'left' ? 0 : 1;
   const motion = (exercise === 'squat' ? [23, 25, 27] : [11, 13, 15]).map(i => i + offset);
   return {
@@ -83,7 +83,7 @@ export function criterionPoints(exercise: ExerciseType, side: BodySide): Partial
 }
 
 // Each criterion uses one anatomical side. Never substitute an isolated opposite ankle.
-export function observePose(points: PoseLandmarks, exercise: ExerciseType, aspect: number, preferredSide: BodySide | null, sourceReason?: UnavailableSourceReason) {
+export function observePose(points: PoseLandmarks, exercise: LegacyExercise, aspect: number, preferredSide: BodySide | null, sourceReason?: UnavailableSourceReason) {
   const evaluate = (side: BodySide) => {
     const requirements = criterionPoints(exercise, side);
     const criteria: CriterionResults = {};

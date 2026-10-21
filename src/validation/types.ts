@@ -1,4 +1,4 @@
-import type { AttemptOutcome, CriterionStatus, ExerciseType, FeedbackCode, MovementAttempt, ObservationQuality, ExerciseAnalysisResult } from '../exercises/types';
+import type { AttemptOutcome, CriterionStatus, LegacyExercise as ExerciseType, FeedbackCode, MovementAttempt, ObservationQuality, ExerciseAnalysisResult } from '../exercises/types';
 
 export { RULES_VERSION } from '../exercises/config';
 import { RULES_VERSION } from '../exercises/config';
