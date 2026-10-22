@@ -16,5 +16,26 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      // Optional Figma export: load only for an explicit local development capture.
+      if (import.meta.env.DEV && location.hash.startsWith('#figmacapture=')) {
+        const loadCapture = () => {
+          const script = document.createElement('script');
+          script.src = 'https://mcp.figma.com/mcp/html-to-design/capture.js';
+          script.async = true;
+          document.head.append(script);
+        };
+        if (document.querySelector('main')) loadCapture();
+        else {
+          const observer = new MutationObserver(() => {
+            if (document.querySelector('main')) {
+              observer.disconnect();
+              loadCapture();
+            }
+          });
+          observer.observe(document.getElementById('root'), { childList: true, subtree: true });
+        }
+      }
+    </script>
   </body>
 </html>
