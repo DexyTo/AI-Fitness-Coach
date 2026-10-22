@@ -1,5 +1,5 @@
 import { inHistoryRange, type HistoryRange } from '../components/workoutAnalytics';
-import { HistoryAnalytics, ExerciseFilter, HistoryDateFilter } from '../components/HistoryAnalytics';
+import { HistorySummary, ExerciseFilter, HistoryDateFilter } from '../components/HistoryAnalytics';
 import { ExerciseVisual } from '../components/ExerciseVisual';
 import { ProgramVisual } from '../programs/ProgramVisual';
 import { ResultOverview } from '../components/ResultOverview';
@@ -79,7 +79,7 @@ export function AccountHistoryView({ user,onHome }: { user:User; onHome:() => vo
       {preview && <section className='import-preview'><h3>В аккаунт @{user.login}</h3><div className='profile-stats'><div><strong>{preview.added}</strong><span>Новых записей</span></div><div><strong>{preview.existing}</strong><span>Уже импортированы</span></div></div><p>Камера: {preview.records.filter(r => r.mode === 'camera').length} · Видео: {preview.records.filter(r => r.mode === 'video').length} · Демо: {preview.records.filter(r => r.mode === 'demo').length}</p><div className='account-actions'><button className='button button-primary' disabled={busy || !preview.added} onClick={() => void doImport()}>Импортировать в этот аккаунт</button><button className='button' disabled={busy} onClick={() => setPreview(null)}>Отмена</button></div></section>}
     </details>
     {notice && <p role='status'>{notice}</p>}{error && <div className='storage-error' role='alert'>{error} <button className='button' disabled={busy || loading} onClick={() => void load()}>Повторить загрузку</button></div>}
-    {!loading && !error && <HistoryAnalytics records={results.map(r => r.record)} />}
+    {!loading && !error && <HistorySummary records={results.map(r => r.record)} />}
     <ExerciseFilter value={exerciseFilter} onChange={setExerciseFilter} />
     <div className='history-toolbar'><h2>Тренировки <span className='count-badge'>{visibleResults.length}</span></h2><HistoryDateFilter value={dateRange} onChange={setDateRange} /><div className='history-actions'><button className='button button-ghost' disabled={loading || busy} onClick={() => void load()}>Обновить</button><button className='button button-ghost' disabled={loading || !results.length} onClick={() => exportResults(results)}>Экспорт JSON</button></div></div>
     {loading ? <p role='status'>Загружаем историю аккаунта…</p> : !error && !results.length && <section className='empty-state'><span className='empty-icon'><Icon name='history' /></span><h2>Первый подход ещё впереди</h2><p>Заверши тренировку или явно перенеси прежние записи.</p><button className='button button-primary' onClick={onHome}>Выбрать тренировку <Icon name='arrow' /></button></section>}

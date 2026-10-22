@@ -1,6 +1,6 @@
 import { inHistoryRange, type HistoryRange } from './workoutAnalytics';
 import { loadPrograms } from '../programs/history';
-import { HistoryAnalytics, ExerciseFilter, HistoryDateFilter } from './HistoryAnalytics';
+import { HistorySummary, ExerciseFilter, HistoryDateFilter } from './HistoryAnalytics';
 import { ExerciseVisual } from './ExerciseVisual';
 import { HoldSummary, SideSummary } from './ExerciseSetup';
 import { goalLabel, resultValue } from '../../shared/workout';
@@ -69,7 +69,7 @@ export function HistoryView({ onHome }: { onHome: () => void }) {
     <div className='page-heading'><div><span className='eyebrow'>ТВОЙ РИТМ</span><h1>История тренировок<span className='accent'>.</span></h1><p className='muted'>Каждый подход — часть твоего пути.</p></div><button className='button button-primary' onClick={onHome}>К тренировке <Icon name='arrow' /></button></div>
     <div className='local-note'><Icon name='shield' /><p>Сохранено только в этом браузере. Видео не сохраняется.<span> При очистке данных браузера история удалится. Экспортируй результаты, чтобы оставить копию.</span></p></div>
     {(history.error || error) && <p role='alert' className='storage-error'>{error || history.error}</p>}
-    {!history.error && <HistoryAnalytics records={[...history.records, ...loadPrograms().records]} />}
+    {!history.error && <HistorySummary records={[...history.records, ...loadPrograms().records]} />}
     <ExerciseFilter value={exerciseFilter} onChange={setExerciseFilter} />
     <div className='history-toolbar'><h2>Одиночные тренировки <span className='count-badge'>{visibleRecords.length}</span></h2><HistoryDateFilter value={dateRange} onChange={setDateRange} /><div className='history-actions'>
       <button className='button button-ghost' onClick={refresh}>Обновить</button>

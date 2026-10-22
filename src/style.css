@@ -162,9 +162,12 @@
   --shadow: 0 4px 22px #1f355608;
   --space: 24px;
   --sidebar-width: 218px;
+  --font-body: 16px;
+  --font-label: 14px;
+  --font-small: 12px;
   color: var(--text);
   background: var(--bg);
-  font-family: 'Inter', 'Manrope', 'Segoe UI', Arial, sans-serif;
+  font-family: 'Manrope', 'Segoe UI', Arial, sans-serif;
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 28px; }

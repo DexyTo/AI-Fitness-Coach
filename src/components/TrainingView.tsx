@@ -141,7 +141,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
   }
   return (
     <main className={`workout page-enter ${started ? 'workout-live' : 'workout-setup'}`}>
-      {!started && <div className='preparation-steps' aria-label='Этапы подготовки'><span className='done'>1 · Упражнение</span><i /><span className='current'>2 · Камера и план</span><i /><span>3 · Движение</span></div>}
+      {!started && <div className='preparation-steps' aria-label='Этапы подготовки'><span className='done'>1 · Упражнение</span><i /><span className='current'>2 · {mode === 'demo' ? 'Демо' : mode === 'video' ? 'Видео' : 'Камера'} и план</span><i /><span>3 · Движение</span></div>}
       <div className='workout-heading'>
         <div>
           <span className='eyebrow'>
@@ -155,7 +155,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
           </h1>
           {started && <span className='live-plan'>Подход {setNumber} / {goal.sets} · цель {goalValue(goal)} {hold ? 'с' : 'повт.'}</span>}
           <p className='muted'>
-            {started ? 'Сосредоточься на движении. Подсказки — рядом.' : 'Настрой камеру и выбери цель подхода.'}
+            {started ? 'Сосредоточься на движении. Подсказки — рядом.' : mode === 'demo' ? 'Выбери цель и попробуй симуляцию без камеры.' : mode === 'video' ? 'Выбери цель и открой запись упражнения.' : 'Настрой камеру и выбери цель подхода.'}
           </p>
         </div>
         <div className='clock'>
@@ -247,7 +247,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
                   disabled={starting || !goalIsValid || (mode === 'video' && !videoUrl)}
                 >
                   {starting ? 'Подготовка…' : startupFailed ? 'Попробовать снова' : mode === 'camera'
-                    ? 'Разрешить доступ к камере'
+                    ? 'Включить камеру'
                     : mode === 'video'
                       ? 'Запустить анализ'
                       : 'Запустить демо'}{' '}
