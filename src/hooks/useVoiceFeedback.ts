@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CoachingCue } from '../exercises/coaching';
 import { VoiceScheduler } from './voiceScheduler';
-import { BrowserSpeech } from './browserSpeech';
+import { RecordedSpeech, voiceTestMessage } from './recordedSpeech';
 
 const storageKey = 'playfit-vision-voice-enabled';
 
 export function useVoiceFeedback(active: boolean, cue: CoachingCue | null, suspended = false) {
   const supported =
     typeof window !== 'undefined' &&
-    'speechSynthesis' in window &&
-    'SpeechSynthesisUtterance' in window;
+    'Audio' in window;
   const [enabled, storeEnabled] = useState(() => {
     try {
       return window.localStorage.getItem(storageKey) !== 'false';
@@ -19,11 +18,10 @@ export function useVoiceFeedback(active: boolean, cue: CoachingCue | null, suspe
   });
   const [error, setError] = useState('');
   const previewing = useRef(false);
-  const player = useRef<BrowserSpeech | null>(null);
+  const player = useRef<RecordedSpeech | null>(null);
   const scheduler = useRef<VoiceScheduler | null>(null);
   if (supported && !player.current) {
-    player.current = new BrowserSpeech(window.speechSynthesis,
-      message => new SpeechSynthesisUtterance(message), setError,
+    player.current = new RecordedSpeech(() => new Audio(), setError,
       () => { previewing.current = false; });
     scheduler.current = new VoiceScheduler(player.current);
   }
@@ -34,7 +32,7 @@ export function useVoiceFeedback(active: boolean, cue: CoachingCue | null, suspe
     previewing.current = true;
     setError('');
     storeEnabled(true);
-    player.current?.speak('Голосовые подсказки включены. Во время тренировки я озвучу замечания по технике.');
+    player.current?.speak(voiceTestMessage);
   };
   const setEnabled = (value: boolean | ((previous: boolean) => boolean)) => {
     const next = typeof value === 'function' ? value(enabled) : value;
@@ -46,10 +44,6 @@ export function useVoiceFeedback(active: boolean, cue: CoachingCue | null, suspe
       setError('');
     }
   };
-
-  useEffect(() => {
-    if (supported) window.speechSynthesis.getVoices();
-  }, [supported]);
 
   useEffect(() => {
     if (!active || suspended) {
@@ -68,7 +62,7 @@ export function useVoiceFeedback(active: boolean, cue: CoachingCue | null, suspe
 
   // Every fresh UI frame rechecks the current cue after the rate limit; no timeout queue.
   useEffect(() => {
-    if (!previewing.current) scheduler.current?.update(active && document.visibilityState !== 'hidden', enabled && !error, cue, performance.now());
+    if (!previewing.current) scheduler.current?.update(active && !suspended && document.visibilityState !== 'hidden', enabled && !error, cue, performance.now());
   });
 
   useEffect(() => {
