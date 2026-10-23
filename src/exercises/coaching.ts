@@ -11,7 +11,7 @@ export interface CoachingCue {
   target?: { points: number[]; label: string };
 }
 
-export const COACHING_POLICY_VERSION = 'phase-cues-v1';
+export const COACHING_POLICY_VERSION = 'continuous-technique-v2';
 export const coachingTiming = { confirmMs: 450, dwellMs: 1800, correctionMs: 900, improvementMs: 1600 };
 
 function phaseCue(exercise: ExerciseType, analysis: ExerciseAnalysisResult): CoachingCue {
@@ -50,7 +50,9 @@ export class CoachingController {
     }
     if (this.lastAt !== null && (now < this.lastAt || now - this.lastAt > 700)) this.reset();
     this.lastAt = now;
-    const context = `${analysis.result.attempts.length}:${analysis.state}:${analysis.preparation.stage}:${analysis.observation.side}`;
+    // The same live trunk/line finding remains relevant through descent, bottom
+    // and ascent. Resetting on each motion phase cut its recording after a syllable.
+    const context = `${analysis.result.attempts.length}:${analysis.preparation.stage}:${analysis.observation.side}`;
     if (context !== this.context) {
       this.reset(); this.context = context; this.lastAt = now;
     }

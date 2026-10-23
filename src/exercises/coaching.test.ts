@@ -107,10 +107,20 @@ describe('current coaching policy (synthetic landmarks)', () => {
     a.state = 'Готов'; a.preparation.stage = 'ready';
     expect(warm(new CoachingController('squat'), a).kind).toBe('phase');
   });
-  it('does not tell the user to go deeper on ascent; phase changes invalidate the old cue', () => {
+  it('keeps the same current trunk finding through motion phases without depth instructions', () => {
+    const a = active(), c = new CoachingController('squat'); warm(c, a);
+    const before = c.update(a, deviation(), 1.6, 550);
+    a.state = 'Нижняя точка';
+    expect(c.update(a, deviation(), 1.6, 600)).toEqual(before);
+    a.state = 'Поднимаетесь';
+    const cue = c.update(a, deviation(), 1.6, 700);
+    expect(cue).toEqual(before);
+    expect(cue.message).not.toMatch(/ниже|глубже/);
+  });
+  it('clears a corrected finding immediately, including on a motion phase change', () => {
     const a = active(), c = new CoachingController('squat'); warm(c, a);
     a.state = 'Поднимаетесь';
-    const cue = c.update(a, deviation(), 1.6, 600);
+    const cue = c.update(a, demoPose('squat', 0), 1.6, 600);
     expect(cue.kind).toBe('phase');
     expect(cue.message).toContain('Возвращайтесь');
     expect(cue.message).not.toContain('ниже');

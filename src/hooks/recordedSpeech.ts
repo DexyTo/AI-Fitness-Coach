@@ -3,6 +3,7 @@ import type { SpeechPort } from './voiceScheduler';
 
 export const voiceTestMessage = phrases.find(phrase => phrase.id === 'voice-test')!.sourceText;
 const recordings = new Map(phrases.map(phrase => [phrase.sourceText, `${phrase.id}.wav`]));
+export type VoicePlayback = 'idle' | 'loading' | 'playing';
 
 export function recordingUrl(message: string) {
   const file = recordings.get(message);
@@ -26,11 +27,13 @@ export class RecordedSpeech implements SpeechPort {
     private readonly create: () => HTMLAudioElement,
     private readonly onError: (message: string) => void,
     private readonly onDone: () => void,
+    private readonly onPlayback: (state: VoicePlayback) => void = () => {},
   ) {}
 
   cancel() {
     this.generation++;
     clearTimeout(this.startTimer);
+    this.onPlayback('idle');
     if (!this.audio) return;
     this.audio.onplaying = this.audio.onended = this.audio.onerror = null;
     this.audio.pause();
@@ -55,7 +58,12 @@ export class RecordedSpeech implements SpeechPort {
     audio.preload = 'auto';
     audio.volume = 1;
     audio.src = url;
-    audio.onplaying = () => { if (current()) clearTimeout(this.startTimer); };
+    this.onPlayback('loading');
+    audio.onplaying = () => {
+      if (!current()) return;
+      clearTimeout(this.startTimer);
+      this.onPlayback('playing');
+    };
     audio.onended = () => {
       if (!current()) return;
       this.cancel();

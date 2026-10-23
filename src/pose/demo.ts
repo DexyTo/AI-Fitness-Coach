@@ -1,8 +1,22 @@
 import { exerciseDemo } from './exerciseDemo';
 import { isLegacy } from '../exercises/registry';
 import type { ExerciseOptions } from '../exercises/types';
-export type DemoScenario = 'normal' | 'occlusion' | 'no_pose' | 'source_gap';
+export type DemoScenario = 'normal' | 'occlusion' | 'no_pose' | 'source_gap' | 'technique';
 export function demoObservation(type:ExerciseType,elapsedMs:number,scenario:DemoScenario='normal',options?:Partial<ExerciseOptions>): {points:PoseLandmarks;sourceReason?:'source_unavailable'} {
+  if (scenario === 'technique' && isLegacy(type)) {
+    // A slower artificial cycle leaves time to hear a current finding. It goes
+    // through the real analyzer/coaching/player; it never fabricates a cue.
+    const time = elapsedMs / 2, points = demoPose(type, time, options);
+    if (time % 3600 >= 1000 && time % 3600 < 3200) {
+      for (const offset of [0, 1]) {
+        if (type === 'squat') {
+          points[11 + offset].x = points[23 + offset].x - 0.19;
+          points[11 + offset].y = points[23 + offset].y - 0.19;
+        } else points[23 + offset].y -= 0.16;
+      }
+    }
+    return { points };
+  }
   const points=demoPose(type,elapsedMs,options),time=elapsedMs%9000;
   if(time>=2400&&time<4300) {
     if(scenario==='no_pose')return {points:[]};

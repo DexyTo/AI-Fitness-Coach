@@ -17,7 +17,8 @@ function setup() {
   };
   const create = vi.fn(() => audio as unknown as HTMLAudioElement);
   const error = vi.fn(), done = vi.fn();
-  return { audio, create, error, done, player: new RecordedSpeech(create, error, done) };
+  const playback = vi.fn();
+  return { audio, create, error, done, playback, player: new RecordedSpeech(create, error, done, playback) };
 }
 afterEach(() => vi.useRealTimers());
 
@@ -47,11 +48,14 @@ describe('recorded speech delivery', () => {
     h.player.speak(voiceTestMessage);
     expect(h.audio.src).toMatch(/\/audio\/ru\/voice-test\.wav$/);
     expect(h.audio.volume).toBe(1);
+    expect(h.playback).toHaveBeenLastCalledWith('loading');
     h.audio.onplaying!();
+    expect(h.playback).toHaveBeenLastCalledWith('playing');
     vi.advanceTimersByTime(6000);
     expect(h.error).not.toHaveBeenCalled();
     h.audio.onended!();
     expect(h.done).toHaveBeenCalledOnce();
+    expect(h.playback).toHaveBeenLastCalledWith('idle');
     h.player.speak(phrases[1].sourceText);
     expect(h.audio.src).toMatch(/\/squat-trunk\.wav$/);
     expect(h.create).toHaveBeenCalledOnce();

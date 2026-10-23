@@ -80,6 +80,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
     setEnabled: setVoiceEnabled,
     supported: voiceSupported,
     error: voiceError,
+    playback: voicePlayback,
     testSound,
   } = useVoiceFeedback(started && phase === 'active' && !session && analysis.state !== 'Оценка приостановлена', cue, !!session || (started && phase !== 'active' && phase !== 'preparing'));
   const accepting = phase === 'active' || phase === 'preparing';
@@ -265,7 +266,19 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
           </div>
         </section>
         <aside className='dashboard'>
-      {!started&&mode==='demo'&&<fieldset className='exercise-options' disabled={starting}><legend>Синтетическое демо</legend><label>Сценарий симуляции<select value={demoScenario} onChange={e=>setDemoScenario(e.target.value as DemoScenario)}><option value='normal'>Полный цикл / удержание</option><option value='occlusion'>Перекрытие обязательных точек</option><option value='no_pose'>Человек пропал из кадра</option><option value='source_gap'>Остановка источника</option></select></label><p className='fine-print'>Пропуск искусственно задан на 2,4–4,3 с каждого 9-секундного отрезка. Это проверка интерфейса, без камеры.</p></fieldset>}
+      {!started && mode === 'demo' && <fieldset className='exercise-options' disabled={starting}>
+        <legend>Синтетическое демо</legend>
+        <label>Сценарий симуляции<select value={demoScenario} onChange={e => setDemoScenario(e.target.value as DemoScenario)}>
+          <option value='normal'>Полный цикл / удержание</option>
+          {isLegacy(exercise) && <option value='technique'>Замечание по технике · проверка голоса</option>}
+          <option value='occlusion'>Перекрытие обязательных точек</option>
+          <option value='no_pose'>Человек пропал из кадра</option>
+          <option value='source_gap'>Остановка источника</option>
+        </select></label>
+        <p className='fine-print'>{demoScenario === 'technique'
+          ? 'В медленном искусственном движении задано замечание. При включённом звуке его озвучит Xenia. Камера не используется.'
+          : 'Пропуск искусственно задан на 2,4–4,3 с каждого 9-секундного отрезка. Это проверка интерфейса, без камеры.'}</p>
+      </fieldset>}
       {!started&&!isLegacy(exercise)&&<ExerciseOptionsFields exercise={exercise} value={options} onChange={setOptions} disabled={starting||!!programStep}/>}
       {!started && <fieldset className='session-goal' disabled={starting || !!programStep}>
         <legend>Твой план</legend>
@@ -325,7 +338,13 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
             </button>
           </div>
           <div className='voice-check'>
-            <p className={voiceError ? 'storage-error' : 'fine-print'} role={voiceError ? 'alert' : undefined}>{voiceError || 'Голос озвучивает замечания по технике. Остальные подсказки — на экране.'}</p>
+            <p className={voiceError ? 'storage-error' : 'fine-print'} role={voiceError ? 'alert' : undefined}>{voiceError || (exercise === 'squat'
+              ? 'Голос озвучивает устойчивый наклон корпуса. Фазы движения и глубина повтора — на экране.'
+              : 'Голос озвучивает замечания по технике. Остальные подсказки — на экране.')}</p>
+            {voiceEnabled && !voiceError && (voicePlayback !== 'idle' || (started && phase === 'active')) && <p className='fine-print' role='status'>{voicePlayback === 'playing'
+              ? 'Воспроизводится подсказка Xenia.'
+              : voicePlayback === 'loading' ? 'Загружаем аудиоподсказку…'
+              : started && phase === 'active' ? 'Голос готов к следующему замечанию.' : ''}</p>}
             <button type='button' className='button button-ghost' disabled={!voiceSupported} onClick={testSound}>Проверить звук</button>
           </div>
           <p className='variant-note'>{def.equipment} · {def.view==='side'?'Вид сбоку':'Вид спереди'} · {options.variant==='seated'?'Сидя':options.variant==='standing'?'Стоя':'Основной вариант'} · Предварительные правила</p>
