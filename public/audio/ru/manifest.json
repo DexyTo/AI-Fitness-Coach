@@ -1,0 +1,299 @@
+{
+  "schemaVersion": 1,
+  "model": "v5_5_ru",
+  "modelUrl": "https://models.silero.ai/models/tts/ru/v5_5_ru.pt",
+  "modelSha256": "50081637b602126ee06cb3bc8a744d25651d2da149ee8864b9a379bfdd934437",
+  "speaker": "xenia",
+  "sampleRate": 48000,
+  "format": "WAV PCM16 mono",
+  "generatedAt": "20261023T055602483163Z",
+  "torchVersion": "2.11.0+cpu",
+  "pythonVersion": "3.13.16",
+  "putAccent": true,
+  "putYo": true,
+  "source": "https://github.com/snakers4/silero-models",
+  "modelLicense": "CC BY-NC-SA 4.0 (see SILERO-LICENSE.txt)",
+  "notes": "Учебный некоммерческий набор. Укороченные реплики связаны с исходным текстом через sourceText. Подключение к приложению выполняется отдельно.",
+  "phrases": [
+    {
+      "id": "voice-test",
+      "sourceText": "Голосовые подсказки включены. Во время тренировки я озвучу замечания по технике.",
+      "text": "Голосовые подсказки включены. Во время тренировки я подскажу, на что обратить внимание.",
+      "file": "voice-test.wav",
+      "durationSeconds": 5.65,
+      "peak": 0.77445,
+      "sha256": "17ceb07fa8cb8afcf01a320e95cce40df087bed9e8731153bf538e516eb9d9f8",
+      "bytes": 542444
+    },
+    {
+      "id": "squat-trunk",
+      "sourceText": "Наблюдаем устойчивый наклон корпуса. Попробуйте держать корпус ровнее.",
+      "text": "Попробуйте держать корпус ровнее.",
+      "file": "squat-trunk.wav",
+      "durationSeconds": 2.112,
+      "peak": 0.81487,
+      "sha256": "ae3121146a1b29ffbc9c75f15fda110df931884bb3658965ff9130c316fd4752",
+      "bytes": 202844
+    },
+    {
+      "id": "pushup-line",
+      "sourceText": "Наблюдаем отклонение линии тела. Попробуйте выровнять плечо, таз и лодыжку.",
+      "text": "Попробуйте выровнять плечо, таз и лодыжку.",
+      "file": "pushup-line.wav",
+      "durationSeconds": 2.788,
+      "peak": 0.82645,
+      "sha256": "fefda561c422c031bc85136fcee750c0cdcd06a0804bd085c2305dfcdb8fa4a4",
+      "bytes": 267644
+    },
+    {
+      "id": "plank-horizontal",
+      "text": "Корпус должен быть близок к горизонтальному.",
+      "sourceText": "Корпус должен быть близок к горизонтальному.",
+      "file": "plank-horizontal.wav",
+      "durationSeconds": 2.375,
+      "peak": 0.87117,
+      "sha256": "61a35dd68e94058652639e008f47aa710c68629a7bd5d066d938a833d3a13446",
+      "bytes": 228044
+    },
+    {
+      "id": "plank-hips-up",
+      "text": "Поднимите таз немного выше.",
+      "sourceText": "Поднимите таз немного выше.",
+      "file": "plank-hips-up.wav",
+      "durationSeconds": 1.762,
+      "peak": 0.78624,
+      "sha256": "5b1cee0a122bd85b018b6a3247e37aee64155443e0e9034bb770a1579d7bb91a",
+      "bytes": 169244
+    },
+    {
+      "id": "plank-hips-down",
+      "text": "Опустите таз немного ниже.",
+      "sourceText": "Опустите таз немного ниже.",
+      "file": "plank-hips-down.wav",
+      "durationSeconds": 1.812,
+      "peak": 0.72912,
+      "sha256": "1330e1cf79123ea289d7c8640686172f4813d38a466b48ad7745172b7e52d4c4",
+      "bytes": 174044
+    },
+    {
+      "id": "plank-knee",
+      "text": "Удерживайте колено почти выпрямленным.",
+      "sourceText": "Удерживайте колено почти выпрямленным.",
+      "file": "plank-knee.wav",
+      "durationSeconds": 2.112,
+      "peak": 0.90205,
+      "sha256": "71d1f3b273082c79e9d4322d3a3277eec1a1bd46c72a4525f28e73e4281a6d8a",
+      "bytes": 202844
+    },
+    {
+      "id": "plank-elbow",
+      "text": "Расположите локоть под плечом, предплечье — вдоль пола.",
+      "sourceText": "Расположите локоть под плечом, предплечье — вдоль пола.",
+      "file": "plank-elbow.wav",
+      "durationSeconds": 3.275,
+      "peak": 0.80032,
+      "sha256": "5b88a7ebcdee0347bf2fce73a508a6ede93c9e870f360acf699e6e80cf8b14b0",
+      "bytes": 314444
+    },
+    {
+      "id": "wall-sit-knee",
+      "text": "Сверьте положение колена с примером стульчика.",
+      "sourceText": "Сверьте положение колена с примером стульчика.",
+      "file": "wall-sit-knee.wav",
+      "durationSeconds": 2.575,
+      "peak": 0.68666,
+      "sha256": "2c8d1695b53217049aa84f90ae3b37f8f97760cb5693daa1e88775b20bba597e",
+      "bytes": 247244
+    },
+    {
+      "id": "wall-sit-thigh",
+      "text": "Бедро должно быть близко к горизонтальному.",
+      "sourceText": "Бедро должно быть близко к горизонтальному.",
+      "file": "wall-sit-thigh.wav",
+      "durationSeconds": 2.35,
+      "peak": 0.91039,
+      "sha256": "5fe54918c856c5b1bafc4faa7a0ffdfca5cd7e918ad2bf003d4ac6ae19123a97",
+      "bytes": 225644
+    },
+    {
+      "id": "wall-sit-trunk",
+      "text": "Держите корпус ближе к вертикали.",
+      "sourceText": "Держите корпус ближе к вертикали.",
+      "file": "wall-sit-trunk.wav",
+      "durationSeconds": 2.138,
+      "peak": 0.73547,
+      "sha256": "d892c2fc8c3e722ebd637f2510479f83fc339f11ecc8b560b5ce4bbf54f633ea",
+      "bytes": 205244
+    },
+    {
+      "id": "wall-sit-position",
+      "text": "Сохраняйте положение сидя у стены.",
+      "sourceText": "Сохраняйте положение сидя у стены.",
+      "file": "wall-sit-position.wav",
+      "durationSeconds": 2.2,
+      "peak": 0.71851,
+      "sha256": "90a630cee1871eaadbebf9048f4a7b4dc3862b621696e247373a141000431bc0",
+      "bytes": 211244
+    },
+    {
+      "id": "bridge-legs",
+      "text": "Обе ноги согнуты; плечи остаются в нижнем положении.",
+      "sourceText": "Обе ноги согнуты; плечи остаются в нижнем положении.",
+      "file": "bridge-legs.wav",
+      "durationSeconds": 3.438,
+      "peak": 0.7867,
+      "sha256": "5532d15f53d40ae5330322da0beb9cc2bef818e43f2c7cee9ec62d34b2b87d62",
+      "bytes": 330044
+    },
+    {
+      "id": "bridge-position",
+      "text": "Сохраните положение лёжа, поднимайте таз, а не корпус целиком.",
+      "sourceText": "Сохраните положение лёжа, поднимайте таз, а не корпус целиком.",
+      "file": "bridge-position.wav",
+      "durationSeconds": 4.188,
+      "peak": 0.59679,
+      "sha256": "3e6013c07f5852f66abbb021390c3c29ffd01217ce537ce5bce2a48f074b57c6",
+      "bytes": 402044
+    },
+    {
+      "id": "lunge-trunk",
+      "text": "Старайтесь держать корпус ровнее в выпаде.",
+      "sourceText": "Старайтесь держать корпус ровнее в выпаде.",
+      "file": "lunge-trunk.wav",
+      "durationSeconds": 2.3,
+      "peak": 0.92,
+      "sha256": "0093b33caa25531900aaf6e498c9adfeb74d382ff6f3fb50217e5a6ea7f66941",
+      "bytes": 220844
+    },
+    {
+      "id": "lunge-support",
+      "text": "Сохраните выбранную опорную ногу впереди.",
+      "sourceText": "Сохраните выбранную опорную ногу впереди.",
+      "file": "lunge-support.wav",
+      "durationSeconds": 2.413,
+      "peak": 0.73171,
+      "sha256": "668b9e95ca612b7b72df476650905584590db257bb879fe3719fa168d6a0e9d4",
+      "bytes": 231644
+    },
+    {
+      "id": "standing-trunk",
+      "text": "Держите корпус ровнее, без выраженного раскачивания.",
+      "sourceText": "Держите корпус ровнее, без выраженного раскачивания.",
+      "file": "standing-trunk.wav",
+      "durationSeconds": 3.125,
+      "peak": 0.83613,
+      "sha256": "12893db354da3f1ea5f1a86c4e614b641c2bd8d52740d3d1e3bcbf63592aa0fc",
+      "bytes": 300044
+    },
+    {
+      "id": "front-hold-height",
+      "text": "Поднимите обе руки перед собой до уровня плеч.",
+      "sourceText": "Поднимите обе руки перед собой до уровня плеч.",
+      "file": "front-hold-height.wav",
+      "durationSeconds": 2.688,
+      "peak": 0.75632,
+      "sha256": "4d66928dcbffad30b112c8b790212333f4544058ada887605e59fdfe8b0d3f13",
+      "bytes": 258044
+    },
+    {
+      "id": "front-hold-elbows",
+      "text": "Держите обе руки почти выпрямленными.",
+      "sourceText": "Держите обе руки почти выпрямленными.",
+      "file": "front-hold-elbows.wav",
+      "durationSeconds": 2.25,
+      "peak": 0.76707,
+      "sha256": "bd532af441567b15e59609d5edb60e3c4081a624dab9e79c4d383aa54474e34f",
+      "bytes": 216044
+    },
+    {
+      "id": "front-hold-position",
+      "text": "Обе руки должны быть видны и направлены вперёд, корпус — стоя.",
+      "sourceText": "Обе руки должны быть видны и направлены вперёд, корпус — стоя.",
+      "file": "front-hold-position.wav",
+      "durationSeconds": 3.875,
+      "peak": 0.91579,
+      "sha256": "0e480102df0d99882beebc979da241451774a359b7170dfc688bfce9e8de4013",
+      "bytes": 372044
+    },
+    {
+      "id": "side-bend-position",
+      "text": "Встаньте прямо, руки с гантелями вдоль тела.",
+      "sourceText": "Встаньте прямо, руки с гантелями вдоль тела.",
+      "file": "side-bend-position.wav",
+      "durationSeconds": 2.862,
+      "peak": 0.73355,
+      "sha256": "5d06866542eb696b70016915a16096cc6c8f03104bc742ce7cc30d93aa413d72",
+      "bytes": 274844
+    },
+    {
+      "id": "side-bend-neutral",
+      "text": "Вернитесь в нейтраль, избегайте выраженного раскачивания.",
+      "sourceText": "Вернитесь в нейтраль, избегайте выраженного раскачивания.",
+      "file": "side-bend-neutral.wav",
+      "durationSeconds": 3.225,
+      "peak": 0.71291,
+      "sha256": "8e98bfbd4b0e55e9dca801f982b71817d8a9927aeb6fe5b86077342d6aaeed91",
+      "bytes": 309644
+    },
+    {
+      "id": "arms-symmetry",
+      "text": "Сверьте выбранное положение тела и амплитуду обеих рук.",
+      "sourceText": "Сверьте выбранное положение тела и амплитуду обеих рук.",
+      "file": "arms-symmetry.wav",
+      "durationSeconds": 3.263,
+      "peak": 0.75167,
+      "sha256": "8665de96c6222e4002c3c0c2e0547c1b991ac31d2d78bf28379e39e965223aec",
+      "bytes": 313244
+    },
+    {
+      "id": "trunk-sway",
+      "sourceText": "Наблюдаем смещение корпуса. Уменьшите раскачивание.",
+      "text": "Уменьшите раскачивание корпуса.",
+      "file": "trunk-sway.wav",
+      "durationSeconds": 2.013,
+      "peak": 0.56444,
+      "sha256": "c8541ffb9fe6700498653111d81f6e94cff0dd38e1174ab8bbe4b6ab4dd1d038",
+      "bytes": 193244
+    },
+    {
+      "id": "arms-smooth",
+      "sourceText": "Положение рук меняется резко. Поднимайте и опускайте их плавнее.",
+      "text": "Поднимайте и опускайте руки плавнее.",
+      "file": "arms-smooth.wav",
+      "durationSeconds": 2.288,
+      "peak": 0.8167,
+      "sha256": "f95210bd25893d108b07bea5e1f1c09c87c5634351561e05153cde2c8a8d4991",
+      "bytes": 219644
+    },
+    {
+      "id": "lunge-support-drift",
+      "text": "Опорная нога заметно сместилась. Сверьте выбранную сторону.",
+      "sourceText": "Опорная нога заметно сместилась. Сверьте выбранную сторону.",
+      "file": "lunge-support-drift.wav",
+      "durationSeconds": 3.625,
+      "peak": 0.92,
+      "sha256": "f91ae0b302fe4bf06c4bacfceeb80a967aeac51dc0c3b79e368bca2132c6366a",
+      "bytes": 348044
+    },
+    {
+      "id": "bridge-shoulders",
+      "text": "Оставьте плечи внизу; поднимайте таз, а не корпус целиком.",
+      "sourceText": "Оставьте плечи внизу; поднимайте таз, а не корпус целиком.",
+      "file": "bridge-shoulders.wav",
+      "durationSeconds": 4.25,
+      "peak": 0.9149,
+      "sha256": "7a0280fb613f69a9c2d1fcca88bef30d31b849db2afbe50d24b40c888569665c",
+      "bytes": 408044
+    },
+    {
+      "id": "side-bend-hips",
+      "sourceText": "Сместился таз: старайтесь наклонять корпус без перемещения всего тела.",
+      "text": "Старайтесь наклонять корпус без перемещения всего тела.",
+      "file": "side-bend-hips.wav",
+      "durationSeconds": 3.087,
+      "peak": 0.85744,
+      "sha256": "7eb548a0961f53c19a0b534b1463de764c3587f5c377cd151465e02b43ef60df",
+      "bytes": 296444
+    }
+  ]
+}
