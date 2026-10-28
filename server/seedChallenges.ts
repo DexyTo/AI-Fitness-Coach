@@ -1,9 +1,11 @@
 import { readConfig } from './config.js';
-import { migrate, openDatabase } from './database.js';
+import { migrate, configuredDatabase } from './database.js';
 import { seedChallenges } from './challengeSeed.js';
-
-const db = openDatabase(readConfig().databasePath);
+const db = (await configuredDatabase(readConfig()));
 try {
-  migrate(db);
-  console.log(`Добавлено учебных испытаний: ${seedChallenges(db)}. Условия прежних участий и результаты сохранены.`);
-} finally { db.close(); }
+    (await migrate(db));
+    console.log(`Добавлено учебных испытаний: ${(await seedChallenges(db))}. Условия прежних участий и результаты сохранены.`);
+}
+finally {
+    (await db.close());
+}

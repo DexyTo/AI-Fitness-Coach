@@ -20,7 +20,7 @@ export async function api<T>(path: string, options: { method?: string; body?: un
     response = await fetch(`/api${path}`, { method: options.method ?? 'GET', credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.any([AbortSignal.timeout(15000), ...(options.signal ? [options.signal] : [])]),
       headers: { 'x-playfit-request': '1', ...(options.body === undefined ? {} : { 'content-type': 'application/json' }), ...(options.userId ? { 'x-playfit-user': options.userId } : {}) },
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }) });
-  } catch { throw new RequestError('Нет связи с локальным сервером. Проверь запуск приложения и повтори действие.', 'NETWORK', 0); }
+  } catch { throw new RequestError('Нет связи с сервером. Подожди немного и повтори действие.', 'NETWORK', 0); }
   const data = await response.json().catch(() => null);
   if (!response.ok || data === null) throw new RequestError(data?.error?.message ?? 'Не удалось получить ответ сервера. Повтори действие.', data?.error?.code ?? 'NETWORK', response.status);
   return data as T;

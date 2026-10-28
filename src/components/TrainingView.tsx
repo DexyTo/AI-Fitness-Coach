@@ -131,7 +131,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
             Новая тренировка <span>↗</span>
           </button>
         </div>
-        <p role={saveError ? 'alert' : 'status'} className={saveError ? 'storage-error' : 'muted'}>{saving ? 'Сохраняем результат… Не закрывай страницу до подтверждения.' : saveError || (user ? `Результат сохранён в локальной серверной базе аккаунта @${user.login}.` : 'Гостевой результат сохранён в истории этого браузера.')}</p>
+        <p role={saveError ? 'alert' : 'status'} className={saveError ? 'storage-error' : 'muted'}>{saving ? 'Сохраняем результат… Не закрывай страницу до подтверждения.' : saveError || (user ? `Результат сохранён в серверной базе аккаунта @${user.login}.` : 'Гостевой результат сохранён в истории этого браузера.')}</p>
         {mode !== 'camera' && <p className='fine-print'>Демо и анализ видеофайлов не начисляют игровые награды.</p>}
         <details className='result-details'><summary>Подходы, условия и параметры</summary><WorkoutDetails record={session} /></details>
         <p className='disclaimer'>
@@ -291,7 +291,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
         <details className='plan-details'><summary>Условия съёмки и правила подсчёта <span>Необязательно</span></summary>
           <label>Условия съёмки для сравнения<input type='text' maxLength={200} value={conditions} placeholder='Например: комната, камера сбоку, дневной свет' onChange={e => setConditions(e.target.value)} /></label>
           <p>{hold?'В цель входят только наблюдаемые интервалы удержания с выполненными критериями.':'В цель входят только полные оценённые циклы.'} Неполные и неоценённые попытки сохраняются отдельно. При достижении цели подход завершится автоматически.</p>
-          <p>Для сравнения тренировок укажи одинаковые условия съёмки. {user ? 'Результаты сохраняются в локальной серверной базе аккаунта.' : 'Гостевые результаты хранятся в этом браузере.'} Видео и поток точек не отправляются на сервер. Цель — твой выбор, а не рекомендация нагрузки.</p>
+          <p>Для сравнения тренировок укажи одинаковые условия съёмки. {user ? 'Результаты сохраняются в серверной базе аккаунта.' : 'Гостевые результаты хранятся в этом браузере.'} Видео и поток точек не отправляются на сервер. Цель — твой выбор, а не рекомендация нагрузки.</p>
         </details>
         {Object.values(goalFields).some(Boolean) && !goalIsValid && <p className='field-hint'>Заполни три поля целыми числами в указанных диапазонах.</p>}
       </fieldset>}

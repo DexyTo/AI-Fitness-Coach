@@ -1,9 +1,11 @@
 import { readConfig } from './config.js';
-import { migrate, openDatabase } from './database.js';
+import { migrate, configuredDatabase } from './database.js';
 import { seedDemo } from './demoSeed.js';
-
-const db = openDatabase(readConfig().databasePath);
+const db = (await configuredDatabase(readConfig()));
 try {
-  migrate(db);
-  console.log(seedDemo(db) ? 'Добавлены 12 вымышленных участников и учебные события. Открой /leaderboard?mode=demo.' : 'Эта учебная неделя уже наполнена. Данные и награды сохранены.');
-} finally { db.close(); }
+    (await migrate(db));
+    console.log((await seedDemo(db)) ? 'Добавлены 12 вымышленных участников и учебные события. Открой /leaderboard?mode=demo.' : 'Эта учебная неделя уже наполнена. Данные и награды сохранены.');
+}
+finally {
+    (await db.close());
+}

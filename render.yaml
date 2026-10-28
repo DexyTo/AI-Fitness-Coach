@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: playfit-vision
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # Paste the Neon connection string in Render, never into this file.
+      - key: DATABASE_URL
+        sync: false
