@@ -3,24 +3,75 @@ import type { Database } from './database.js';
 import { createHash, scryptSync } from 'node:crypto';
 import { projectWeek, publishChallenge } from './challengeSeed.js';
 import { availablePrograms } from './programs.js';
-import { accountCompletion, RULES_VERSION } from './progression.js';
+import { accountCompletion, projectDay, RULES_VERSION } from './progression.js';
 import { completeChallenge } from './challenges.js';
 import { checkDuelCompletion, completeDuel, finalizeDuel } from './duels.js';
 import { DUEL_RULES } from '../shared/duels.js';
 import type { ChallengeDefinition } from '../shared/challenges.js';
-import type { ProgramSnapshot } from '../shared/program.js';
-import { demoRecord } from './demoFixtures.js';
+import type { ProgramPlan, ProgramRecord, ProgramSnapshot } from '../shared/program.js';
+import { demoHistoryRecord, demoRecord } from './demoFixtures.js';
 export const DEMO_PASSWORD = 'PlayFitStudy2026';
 export const DEMO_IDS = Array.from({ length: 12 }, (_, i) => `playfit-demo-${String(i + 1).padStart(2, '0')}`);
 const names = ['Лайм', 'Комета', 'Кедр', 'Искра', 'Маяк', 'Волна', 'Астра', 'Сокол', 'Ветер', 'Луч', 'Клевер', 'Орион'];
 const dataset = 'platform-v1';
-// One atomic batch per Kyiv week, with stable source IDs. No arbitrary balances:
-// completion and finalization use the same accounting functions as real results.
+const conditions = 'Вымышленный учебный результат · без камеры';
+const historyPrefix = 'demo:lime-history:';
+const historyPlanIds = ['mixed-sets', 'lunge-bridge', 'alternating-four', 'standing-dumbbells'];
+
+async function saveDemoResult(db: Database, userId: string, snapshot: ProgramSnapshot, record: ProgramRecord, at: string, challengeId: string | null = null, duelId: string | null = null) {
+    const { id } = record;
+    const resultId = `${id}:result`;
+    const summary = JSON.stringify(record);
+    await db.prepare('INSERT INTO workout_runs (id,user_id,request_id,snapshot_json,created_at,reward_rules_version,challenge_participation_id,duel_participant_id) VALUES (?,?,?,?,?,?,?,?)')
+        .run(id, userId, id, JSON.stringify(snapshot), record.date, RULES_VERSION, challengeId, duelId);
+    if (duelId) {
+        await db.prepare('INSERT INTO duel_drafts VALUES (?,?,?,?)').run(duelId, 1, summary, at);
+        await checkDuelCompletion(db, userId, id, record, at, (_status, _code, message) => { throw Error(message); });
+    }
+    await db.prepare('INSERT INTO workout_results VALUES (?,?,?,?,?,?,?,?,?)')
+        .run(resultId, userId, id, 'training', record.schemaVersion, null, summary, at, null);
+    await accountCompletion(db, userId, resultId, record, RULES_VERSION, at);
+    if (challengeId) await completeChallenge(db, userId, id, resultId, record, at);
+    if (duelId) await completeDuel(db, userId, id, resultId, record, at);
+}
+
+async function seedDemoHistory(db: Database, catalog: ProgramPlan[], now: Date) {
+    const plans = historyPlanIds.map(id => {
+        const plan = catalog.find(program => program.id === id);
+        if (!plan) throw Error(`Missing educational program: ${id}`);
+        return plan;
+    });
+    const userId = DEMO_IDS[0];
+    const rows = await db.prepare('SELECT id FROM workout_runs WHERE user_id=? AND id LIKE ?').all(userId, `${historyPrefix}%`) as { id: string }[];
+    const existing = new Set(rows.map(row => row.id));
+    const today = new Date(`${projectDay(now)}T15:00:00.000Z`);
+    let added = false;
+    for (let daysAgo = 59; daysAgo >= 0; daysAgo--) {
+        const date = new Date(today);
+        date.setUTCDate(date.getUTCDate() - daysAgo);
+        // Older weeks have days off. The seven-day presentation window has daily activity.
+        if (daysAgo >= 7 && [2, 5].includes(date.getUTCDay())) continue;
+        const id = historyPrefix + date.toISOString().slice(0, 10);
+        if (existing.has(id)) continue;
+        const dayNumber = Math.floor(date.getTime() / 86_400_000);
+        const program = structuredClone(plans[dayNumber % plans.length]);
+        for (const step of program.steps) {
+            if (step.goal.unit !== 'seconds') step.goal.reps += dayNumber % 5;
+        }
+        const snapshot: ProgramSnapshot = { kind: 'program', program, mode: 'camera', conditions };
+        const at = new Date(Math.min(+date, +now)).toISOString();
+        await saveDemoResult(db, userId, snapshot, demoHistoryRecord(id, at, snapshot, dayNumber), at);
+        added = true;
+    }
+    return added;
+}
+
+// Save the weekly competition examples and missing history in one transaction.
+// Completion and finalization use the same accounting functions as real results.
 export async function seedDemo(db: Database, now = new Date()) {
     return (await db.transaction(async () => {
         const week = projectWeek(now), batch = `demo:${dataset}:${week.key}`;
-        if ((await db.prepare('SELECT 1 FROM demo_seed_batches WHERE id=?').get(batch)))
-            return false;
+        const weekSeeded = await db.prepare('SELECT 1 FROM demo_seed_batches WHERE id=?').get(batch);
         const at = now.toISOString();
         for (const [i, id] of DEMO_IDS.entries()) {
             const login = `demo_${String(i + 1).padStart(2, '0')}`;
@@ -37,27 +88,20 @@ export async function seedDemo(db: Database, now = new Date()) {
             (await db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?)').run(id, login, password, names[i], ['sprout', 'bolt', 'sun', 'mountain'][i % 4], at));
             (await db.prepare('INSERT INTO demo_users VALUES (?,?)').run(id, dataset));
         }
-        const program = structuredClone((await availablePrograms(db, null)).find(p => p.id === 'squat-pushup'));
+        const catalog = await availablePrograms(db, null);
+        if (weekSeeded) return seedDemoHistory(db, catalog, now);
+        const program = structuredClone(catalog.find(p => p.id === 'squat-pushup'));
         if (!program)
             throw Error('Missing catalog program squat-pushup');
         program.steps.forEach(s => { s.goal = { sets: 1, reps: 1, restSeconds: 0 }; s.transitionSeconds = 0; });
-        const task: ProgramSnapshot = { kind: 'program', program, mode: 'camera', conditions: 'Вымышленный учебный результат · без камеры' };
+        const task: ProgramSnapshot = { kind: 'program', program, mode: 'camera', conditions };
         // Demo definitions and participants are isolated from ordinary challenges.
         // Seed never alters an existing definition or accepted snapshot.
         const definition: ChallengeDefinition = { id: `${batch}:challenge`, version: 1, title: 'Учебный пример: два движения', description: 'Вымышленные результаты для показа платформы. Упражнения не выполнялись.',
             educational: true, startsAt: week.startsAt, endsAt: week.endsAt, type: 'program', target: 1, task, reward: { xp: 30, points: 10 }, rulesVersion: 'challenges-v1', isDemo: true };
         (await publishChallenge(db, definition));
         const save = async (userId: string, id: string, snapshot: ProgramSnapshot, fraction: number, challengeId: string | null, duelId: string | null) => {
-            const record = demoRecord(id, at, snapshot, fraction), resultId = `${id}:result`;
-            (await db.prepare('INSERT INTO workout_runs (id,user_id,request_id,snapshot_json,created_at,reward_rules_version,challenge_participation_id,duel_participant_id) VALUES (?,?,?,?,?,?,?,?)').run(id, userId, id, JSON.stringify(snapshot), at, RULES_VERSION, challengeId, duelId));
-            if (duelId) {
-                (await db.prepare('INSERT INTO duel_drafts VALUES (?,?,?,?)').run(duelId, 1, JSON.stringify(record), at));
-                (await checkDuelCompletion(db, userId, id, record, at, (_status, _code, message) => { throw Error(message); }));
-            }
-            (await db.prepare('INSERT INTO workout_results VALUES (?,?,?,?,?,?,?,?,?)').run(resultId, userId, id, 'training', 2, null, JSON.stringify(record), at, null));
-            (await accountCompletion(db, userId, resultId, record, RULES_VERSION, at));
-            (await completeChallenge(db, userId, id, resultId, record, at));
-            (await completeDuel(db, userId, id, resultId, record, at));
+            await saveDemoResult(db, userId, snapshot, demoRecord(id, at, snapshot, fraction), at, challengeId, duelId);
         };
         for (const [i, user] of DEMO_IDS.entries()) {
             const participation = `${batch}:c${i}`;
@@ -85,6 +129,7 @@ export async function seedDemo(db: Database, now = new Date()) {
             (await finalizeDuel(db, id, at));
         }
         (await db.prepare('INSERT INTO demo_seed_batches VALUES (?,?)').run(batch, at));
+        await seedDemoHistory(db, catalog, now);
         return true;
     }).immediate());
 }

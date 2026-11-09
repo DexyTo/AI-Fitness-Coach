@@ -5,14 +5,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { migrate, openDatabase } from './database.js';
 import { buildApp } from './app.js';
-import { appendReward, progression } from './progression.js';
+import { appendReward, progression, projectDay } from './progression.js';
 import { leaderboard } from './leaderboard.js';
 import { DEMO_IDS, DEMO_PASSWORD, seedDemo } from './demoSeed.js';
 import { seedChallenges } from './challengeSeed.js';
 import { availablePrograms } from './programs.js';
 import { demoRecord } from './demoFixtures.js';
 import type { ChallengeView } from '../shared/challenges.js';
-import type { ProgramSnapshot } from '../shared/program.js';
+import { validProgramRecord, type ProgramRecord, type ProgramSnapshot } from '../shared/program.js';
 const cleanups: (() => unknown | Promise<unknown>)[] = [];
 afterEach(async () => { vi.useRealTimers(); for (const cleanup of cleanups.splice(0).reverse())
     await cleanup(); });
@@ -97,16 +97,27 @@ describe('ranking and explicitly isolated educational platform data', () => {
         expect((await s.req('ordinary', 'GET', '/api/leaderboard?mode=demo')).json().me).toBeNull();
         const p = (await s.app.inject({ url: `/api/participants/${DEMO_IDS[0]}` })).json().participant;
         expect(Object.keys(p).sort()).toEqual(['achievements', 'avatar', 'id', 'isDemo', 'level', 'nickname', 'points', 'results']);
-        expect(p).toMatchObject({ isDemo: true, points: 25, level: 2 });
+        expect(p).toMatchObject({ isDemo: true, points: 25 });
+        expect(p.level).toBeGreaterThan(2);
         expect(p.achievements.map((a: {
             id: string;
         }) => a.id)).toContain('first-duel');
         expect(p.results.map((r: {
             outcome: string;
         }) => r.outcome)).toContain('win');
-        expect((await s.req(DEMO_IDS[0], 'GET', '/api/history')).json().results.every((r: {
-            isDemo: boolean;
-        }) => r.isDemo)).toBe(true);
+        const { results } = (await s.req(DEMO_IDS[0], 'GET', '/api/history')).json() as {
+            results: { isDemo: boolean; record: ProgramRecord }[];
+        };
+        expect(results.every(r => r.isDemo && validProgramRecord(r.record))).toBe(true);
+        const history = results.filter(r => r.record.id.startsWith('demo:lime-history:')).map(r => r.record);
+        const days = new Set(history.map(r => projectDay(r.date)));
+        expect(days.size).toBe(history.length);
+        expect(days.size).toBeGreaterThan(40);
+        expect([...days].sort()[0]).toBe('2026-08-22');
+        expect(new Set(history.map(r => r.program.id)).size).toBe(4);
+        expect(history.some(r => r.steps.some(step => step.sets.some(set => set.result.withErrors > 0)))).toBe(true);
+        expect((await progression(s.db, DEMO_IDS[0])).activity.every(day => day.workouts > 0)).toBe(true);
+        expect((await s.req('ordinary', 'GET', '/api/history')).json().results).toEqual([]);
         expect((await s.req(DEMO_IDS[0], 'GET', '/api/me/overview')).json().recent.every((r: {
             isDemo: boolean;
         }) => r.isDemo)).toBe(true);
@@ -133,13 +144,18 @@ describe('ranking and explicitly isolated educational platform data', () => {
         expect((await seedDemo(db))).toBe(false);
         expect((await db.prepare('SELECT * FROM reward_ledger ORDER BY id').all())).toEqual(ledger);
         expect((await reopened.inject({ url: '/api/leaderboard?mode=demo' })).json().total).toBe(12);
+        vi.setSystemTime(new Date('2026-10-21T10:00:00.000Z'));
+        expect(await seedDemo(db)).toBe(true);
+        expect(await seedDemo(db)).toBe(false);
+        expect((await db.prepare('SELECT COUNT(*) AS n FROM demo_seed_batches').get())).toEqual({ n: 1 });
+        expect((await db.prepare('SELECT COUNT(*) AS n FROM workout_runs WHERE user_id=?').get(DEMO_IDS[0]))).toEqual({ n: results.length + 1 });
         vi.setSystemTime(new Date('2026-10-27T10:00:00.000Z'));
         expect((await seedDemo(db))).toBe(true);
         expect((await seedDemo(db))).toBe(false);
         expect((await db.prepare('SELECT COUNT(*) AS n FROM demo_users').get())).toEqual({ n: 12 });
         expect((await db.prepare('SELECT * FROM users WHERE id=?').get('ordinary'))).toEqual(ordinary);
         expect((await leaderboard(db, DEMO_IDS[0], 'all', 'demo')).me!.points).toBeGreaterThan((await leaderboard(db, DEMO_IDS[0], 'week', 'demo')).me!.points);
-    }, 15000);
+    }, 25000);
     it('rolls the entire batch back on a reserved login collision or failed award', async () => {
         const s = (await setup());
         (await s.addUser('demo_02'));
