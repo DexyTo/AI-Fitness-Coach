@@ -22,4 +22,8 @@ export class VoiceScheduler {
     this.lastAt = now;
   }
   stop() { this.port.cancel(); this.current = this.spoken = null; }
+  reset() {
+    this.stop();
+    this.lastAt = -Infinity;
+  }
 }

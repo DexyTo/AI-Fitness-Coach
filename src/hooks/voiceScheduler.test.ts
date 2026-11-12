@@ -37,4 +37,11 @@ describe('speech lifecycle without native audio', () => {
     expect(port.speak).not.toHaveBeenCalled();
     s.stop(); expect(port.cancel).toHaveBeenCalledOnce();
   });
+  it('lets the first cue of a new workout speak without the previous cooldown', () => {
+    const { s, port } = setup();
+    s.update(true, true, cue(), 0);
+    s.reset();
+    s.update(true, true, cue(), 1000);
+    expect(port.speak.mock.calls.map(c => c[0])).toEqual(['lean:1', 'lean:1']);
+  });
 });

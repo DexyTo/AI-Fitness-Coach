@@ -81,6 +81,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
     supported: voiceSupported,
     error: voiceError,
     playback: voicePlayback,
+    prepareSound,
     testSound,
   } = useVoiceFeedback(started && phase === 'active' && !session && analysis.state !== 'Оценка приостановлена', cue, !!session || (started && phase !== 'active' && phase !== 'preparing'));
   const accepting = phase === 'active' || phase === 'preparing';
@@ -244,7 +245,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
                 {mode === 'video' && videoUrl && <small>Видео выбрано ✓</small>}
                 <button
                   className='button button-primary'
-                  onClick={() => { if (voiceEnabled) testSound(); setAttemptedStart(true); void start(); }}
+                  onClick={() => { prepareSound(); setAttemptedStart(true); void start(); }}
                   disabled={starting || !goalIsValid || (mode === 'video' && !videoUrl)}
                 >
                   {starting ? 'Подготовка…' : startupFailed ? 'Попробовать снова' : mode === 'camera'

@@ -3,6 +3,8 @@ import type { SpeechPort } from './voiceScheduler';
 
 export const voiceTestMessage = phrases.find(phrase => phrase.id === 'voice-test')!.sourceText;
 const recordings = new Map(phrases.map(phrase => [phrase.sourceText, `${phrase.id}.wav`]));
+// 1 ms of PCM silence lets the start click activate the media element without a spoken preview.
+const silenceUrl = 'data:audio/wav;base64,UklGRiwAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQgAAACAgICAgICAgA==';
 export type VoicePlayback = 'idle' | 'loading' | 'playing';
 
 export function recordingUrl(message: string) {
@@ -16,7 +18,7 @@ function audioErrorMessage(code: string) {
   return 'Не удалось воспроизвести голос. Проверь громкость и звук вкладки, затем нажми «Проверить звук».';
 }
 
-// Reuse one media element so the user's sound check also unlocks subsequent cues.
+// Reuse one media element for playback initiated by a click and subsequent cues.
 // Every request owns its callbacks and timeout; cancelled advice is never resumed.
 export class RecordedSpeech implements SpeechPort {
   private audio: HTMLAudioElement | null = null;
@@ -41,11 +43,22 @@ export class RecordedSpeech implements SpeechPort {
     this.audio.load();
   }
 
+  prepare() {
+    this.play(silenceUrl, false);
+  }
+
   speak(message: string) {
-    this.cancel();
     const url = recordingUrl(message);
     // New/unrecorded messages remain on screen until a matching clip is provided.
-    if (!url) { this.onDone(); return; }
+    if (url) this.play(url, true);
+    else {
+      this.cancel();
+      this.onDone();
+    }
+  }
+
+  private play(url: string, reportPlayback: boolean) {
+    this.cancel();
     const generation = this.generation;
     const audio = this.audio ??= this.create();
     const current = () => generation === this.generation;
@@ -58,11 +71,11 @@ export class RecordedSpeech implements SpeechPort {
     audio.preload = 'auto';
     audio.volume = 1;
     audio.src = url;
-    this.onPlayback('loading');
+    if (reportPlayback) this.onPlayback('loading');
     audio.onplaying = () => {
       if (!current()) return;
       clearTimeout(this.startTimer);
-      this.onPlayback('playing');
+      if (reportPlayback) this.onPlayback('playing');
     };
     audio.onended = () => {
       if (!current()) return;

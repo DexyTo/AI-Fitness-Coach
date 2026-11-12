@@ -27,6 +27,13 @@ export function useVoiceFeedback(active: boolean, cue: CoachingCue | null, suspe
     scheduler.current = new VoiceScheduler(player.current);
   }
   // These functions must run directly in a click handler, before camera/model awaits.
+  const prepareSound = () => {
+    if (!player.current || !enabled) return;
+    previewing.current = false;
+    scheduler.current?.reset();
+    setError('');
+    player.current.prepare();
+  };
   const testSound = () => {
     if (!supported) return;
     scheduler.current?.stop();
@@ -83,5 +90,5 @@ export function useVoiceFeedback(active: boolean, cue: CoachingCue | null, suspe
     },
     [supported],
   );
-  return { enabled, setEnabled, supported, error, playback, testSound };
+  return { enabled, setEnabled, supported, error, playback, prepareSound, testSound };
 }

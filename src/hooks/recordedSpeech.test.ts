@@ -42,6 +42,25 @@ describe('Xenia recording catalog', () => {
 });
 
 describe('recorded speech delivery', () => {
+  it('primes the same element silently and allows the first cue to replace it immediately', () => {
+    vi.useFakeTimers();
+    const h = setup();
+    h.player.prepare();
+    expect(h.audio.src).toMatch(/^data:audio\/wav;base64,/);
+    h.audio.onplaying!();
+    expect(h.playback).toHaveBeenLastCalledWith('idle');
+    expect(h.playback).not.toHaveBeenCalledWith('loading');
+    expect(h.playback).not.toHaveBeenCalledWith('playing');
+
+    const staleEnd = h.audio.onended!;
+    h.player.speak(phrases[1].sourceText);
+    staleEnd();
+    expect(h.audio.src).toMatch(/\/squat-trunk\.wav$/);
+    expect(h.playback).toHaveBeenLastCalledWith('loading');
+    expect(h.create).toHaveBeenCalledOnce();
+    h.player.cancel();
+  });
+
   it('plays the check and a technique clip on the same unlocked element at full volume', () => {
     vi.useFakeTimers();
     const h = setup();
