@@ -75,6 +75,8 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
   useEffect(() => { if (started || session) window.scrollTo({ top: 0, behavior: 'smooth' }); }, [started, session]);
   useEffect(() => { if (started) setAttemptedStart(false); }, [started]);
   const startupFailed = attemptedStart && !started && !starting;
+  const accepting = phase === 'active' || phase === 'preparing';
+  const voiceCue = cue?.kind === 'observation' || phase === 'active' ? cue : null;
   const {
     enabled: voiceEnabled,
     setEnabled: setVoiceEnabled,
@@ -83,8 +85,7 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
     playback: voicePlayback,
     prepareSound,
     testSound,
-  } = useVoiceFeedback(started && phase === 'active' && !session && analysis.state !== 'Оценка приостановлена', cue, !!session || (started && phase !== 'active' && phase !== 'preparing'));
-  const accepting = phase === 'active' || phase === 'preparing';
+  } = useVoiceFeedback(started && accepting && !session, voiceCue, !!session || (started && !accepting));
   const previousAttempt = analysis.result.attempts.at(-1);
   const onFile = (file?: File) => {
     if (!file) return;
@@ -340,8 +341,8 @@ export function TrainingView({ exercise, mode, onHome, programStep }: Props) {
           </div>
           <div className='voice-check'>
             <p className={voiceError ? 'storage-error' : 'fine-print'} role={voiceError ? 'alert' : undefined}>{voiceError || (exercise === 'squat'
-              ? 'Голос озвучивает устойчивый наклон корпуса. Фазы движения и глубина повтора — на экране.'
-              : 'Голос озвучивает замечания по технике. Остальные подсказки — на экране.')}</p>
+              ? 'Голос подскажет, если тело плохо видно или заметен устойчивый наклон корпуса.'
+              : 'Голос подскажет, если тело плохо видно или есть замечание по технике.')}</p>
             {voiceEnabled && !voiceError && (voicePlayback !== 'idle' || (started && phase === 'active')) && <p className='fine-print' role='status'>{voicePlayback === 'playing'
               ? 'Воспроизводится подсказка Xenia.'
               : voicePlayback === 'loading' ? 'Загружаем аудиоподсказку…'

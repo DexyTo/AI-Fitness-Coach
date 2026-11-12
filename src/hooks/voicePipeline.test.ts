@@ -1,15 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import manifest from '../../public/audio/ru/manifest.json';
 import { CoachingController } from '../exercises/coaching';
-import { demoObservation } from '../pose/demo';
+import { optionsFor } from '../exercises/registry';
+import { demoObservation, type DemoScenario } from '../pose/demo';
 import { TrainingController } from '../training/session';
 import { RecordedSpeech } from './recordedSpeech';
-import { VoiceScheduler, voiceIntervalMs } from './voiceScheduler';
+import { VoiceScheduler, observationConfirmMs, voiceIntervalMs } from './voiceScheduler';
 
 // Exercise the actual analyzer → session → coaching → scheduler → clip mapping.
 // A fake media element uses each supplied WAV's real duration, rather than
 // claiming success merely because play() was called before an immediate cancel.
-function harness(exercise: 'squat' | 'pushup') {
+function harness(exercise: 'squat' | 'pushup' | 'glute_bridge') {
   vi.useFakeTimers();
   vi.setSystemTime(0);
   const clips: { url: string; start: number; end?: number; completed: boolean }[] = [];
@@ -40,12 +41,14 @@ function harness(exercise: 'squat' | 'pushup') {
   const error = vi.fn();
   const player = new RecordedSpeech(() => audio as unknown as HTMLAudioElement, error, () => {});
   const scheduler = new VoiceScheduler(player), coaching = new CoachingController(exercise);
-  const session = new TrainingController(exercise, 'demo', { sets: 1, reps: 50, restSeconds: 0 }, '', 0);
-  const frame = (elapsed: number, missing = false, enabled = true) => {
-    const { points } = demoObservation(exercise, elapsed, 'technique');
-    const analysis = session.sample(missing ? [] : points, Date.now() + 1, 1.6, Date.now());
-    const cue = coaching.update(analysis, missing ? [] : points, 1.6, Date.now());
-    scheduler.update(session.phase === 'active', enabled, cue, Date.now());
+  const session = new TrainingController(exercise, 'demo', {
+    schemaVersion: 2, unit: 'reps', options: optionsFor(exercise), sets: 1, reps: 50, restSeconds: 0,
+  }, '', 0);
+  const frame = (elapsed: number, scenario: DemoScenario = 'technique', enabled = true) => {
+    const { points, sourceReason } = demoObservation(exercise, elapsed, scenario);
+    const analysis = session.sample(points, Date.now() + 1, 1.6, Date.now(), sourceReason);
+    const cue = coaching.update(analysis, points, 1.6, Date.now());
+    scheduler.update(session.acceptsFrames, enabled, session.phase === 'active' || cue.kind === 'observation' ? cue : null, Date.now());
     return { analysis, cue };
   };
   return { clips, error, frame, scheduler, audio, session };
@@ -73,6 +76,38 @@ describe('live voice pipeline with synthetic observations', () => {
     });
   }
 
+  describe.each(['squat', 'pushup', 'glute_bridge'] as const)('%s tracking warnings', exercise => {
+    it.each([['occlusion', 'observation-missing-points.wav'], ['no_pose', 'observation-no-pose.wav']] as const)(
+      'plays one complete recording during %s even while assessment is suspended', (scenario, filename) => {
+        const h = harness(exercise);
+        let firstWarningAt: number | undefined;
+        for (let elapsed = 0; elapsed < 5000; elapsed += 90) {
+          const { analysis, cue } = h.frame(elapsed, scenario);
+          if (cue.kind === 'observation' && cue.voiceMessage) {
+            firstWarningAt ??= elapsed;
+            expect(analysis.state).toBe('Оценка приостановлена');
+          }
+          vi.advanceTimersByTime(90);
+        }
+        const warnings = h.clips.filter(clip => clip.url.includes('/observation-'));
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0].url.split('/').at(-1)).toBe(filename);
+        expect(warnings[0].start - firstWarningAt!).toBeGreaterThanOrEqual(observationConfirmMs);
+        expect(warnings[0].completed).toBe(true);
+        expect(h.error).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  it('does not confuse a stopped source with a missing person', () => {
+    const h = harness('squat');
+    for (let elapsed = 0; elapsed < 5000; elapsed += 90) {
+      h.frame(elapsed, 'source_gap');
+      vi.advanceTimersByTime(90);
+    }
+    expect(h.clips).toHaveLength(0);
+  });
+
   it.each(['pose-loss', 'correction', 'mute', 'pause'] as const)('still cancels immediately on %s instead of finishing stale advice', reason => {
     const h = harness('squat');
     let elapsed = 0;
@@ -83,7 +118,8 @@ describe('live voice pipeline with synthetic observations', () => {
     expect(h.clips).toHaveLength(1);
     if (reason === 'pause') h.session.pause(Date.now() + 1);
     // 6500 in the fixture is a corrected trunk position in the same attempt.
-    h.frame(reason === 'correction' ? 6500 : elapsed, reason === 'pose-loss', reason !== 'mute');
+    if (reason === 'pose-loss') h.frame(2600, 'no_pose');
+    else h.frame(reason === 'correction' ? 6500 : elapsed, 'technique', reason !== 'mute');
     expect(h.audio.src).toBe('');
     expect(h.clips[0].completed).toBe(false);
     expect(h.clips[0].end! - h.clips[0].start).toBeLessThanOrEqual(90);

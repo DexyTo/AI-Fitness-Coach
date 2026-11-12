@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { VoiceScheduler } from './voiceScheduler';
+import { VoiceScheduler, observationConfirmMs, voiceIntervalMs } from './voiceScheduler';
 import type { CoachingCue } from '../exercises/coaching';
 
 const cue = (key = 'lean:1'): CoachingCue => ({ key, kind: 'technique', message: key });
+const observation = (key: string): CoachingCue => ({ key, kind: 'observation', message: 'Текст на экране', voiceMessage: key });
 function setup() {
   const port = { cancel: vi.fn(), speak: vi.fn() };
   return { port, s: new VoiceScheduler(port) };
@@ -43,5 +44,34 @@ describe('speech lifecycle without native audio', () => {
     s.reset();
     s.update(true, true, cue(), 1000);
     expect(port.speak.mock.calls.map(c => c[0])).toEqual(['lean:1', 'lean:1']);
+  });
+  it('replaces a technique cue only after the tracking warning persists', () => {
+    const { s, port } = setup();
+    const lost = observation('no_pose');
+    s.update(true, true, cue(), 0);
+    s.update(true, true, lost, 100);
+    expect(port.cancel).toHaveBeenCalledTimes(2);
+    s.update(true, true, null, 200);
+    s.update(true, true, lost, 500);
+    s.update(true, true, lost, 500 + observationConfirmMs - 1);
+    expect(port.speak.mock.calls.map(c => c[0])).toEqual(['lean:1']);
+    s.update(true, true, lost, 500 + observationConfirmMs);
+    s.update(true, true, lost, 10000);
+    expect(port.speak.mock.calls.map(c => c[0])).toEqual(['lean:1', 'no_pose']);
+  });
+  it('limits repeated warnings for the same tracking issue across episodes', () => {
+    const { s, port } = setup();
+    const partial = observation('missing_points'), lost = observation('no_pose');
+    s.update(true, true, partial, 0);
+    s.update(true, true, partial, observationConfirmMs);
+    s.update(true, true, null, 1000);
+    s.update(true, true, partial, 1200);
+    s.update(true, true, partial, 1200 + observationConfirmMs);
+    s.update(true, true, lost, 2000);
+    s.update(true, true, lost, 2000 + observationConfirmMs);
+    expect(port.speak.mock.calls.map(c => c[0])).toEqual(['missing_points', 'no_pose']);
+    s.update(true, true, partial, 3000);
+    s.update(true, true, partial, observationConfirmMs + voiceIntervalMs);
+    expect(port.speak.mock.calls.map(c => c[0])).toEqual(['missing_points', 'no_pose', 'missing_points']);
   });
 });

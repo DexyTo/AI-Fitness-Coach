@@ -294,6 +294,38 @@
       "peak": 0.85744,
       "sha256": "7eb548a0961f53c19a0b534b1463de764c3587f5c377cd151465e02b43ef60df",
       "bytes": 296444
+    },
+    {
+      "id": "observation-missing-points",
+      "sourceText": "Уберите перекрытия.",
+      "text": "Уберите перекрытия.",
+      "file": "observation-missing-points.wav",
+      "durationSeconds": 1.188,
+      "peak": 0.64679,
+      "sha256": "5d05121f783f59003c603cb7c451a6c889f632f9c6d2e659e92afa1b4c16a5ab",
+      "bytes": 114044,
+      "generation": {
+        "generatedAt": "20261112T093434368158Z",
+        "torchVersion": "2.10.0+cpu",
+        "pythonVersion": "3.13.3"
+      },
+      "trimTailMs": 200
+    },
+    {
+      "id": "observation-no-pose",
+      "sourceText": "Вернитесь в кадр.",
+      "text": "Вернитесь в кадр.",
+      "file": "observation-no-pose.wav",
+      "durationSeconds": 1,
+      "peak": 0.64384,
+      "sha256": "8168dee3944540bc7b89903206f7707628f70c6d3f55a4a20e1825d363c30c7c",
+      "bytes": 96044,
+      "generation": {
+        "generatedAt": "20261112T093434368158Z",
+        "torchVersion": "2.10.0+cpu",
+        "pythonVersion": "3.13.3"
+      },
+      "trimTailMs": 200
     }
   ]
 }

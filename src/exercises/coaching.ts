@@ -2,17 +2,29 @@ import { isLegacy, exerciseRegistry } from './registry';
 import { observePose, criterionPoints, visible } from '../pose/landmarks';
 import { variant } from './config';
 import { reasonText, type ExerciseAnalysisResult, type ExerciseResult, type ExerciseType,
-  type FeedbackCode, type MovementAttempt, type PoseLandmarks } from './types';
+  type FeedbackCode, type MovementAttempt, type ObservationReasonCode, type PoseLandmarks } from './types';
 
 export interface CoachingCue {
   key: string;
   kind: 'observation' | 'phase' | 'technique' | 'improvement';
   message: string;
+  voiceMessage?: string;
   target?: { points: number[]; label: string };
 }
 
 export const COACHING_POLICY_VERSION = 'continuous-technique-v2';
 export const coachingTiming = { confirmMs: 450, dwellMs: 1800, correctionMs: 900, improvementMs: 1600 };
+
+const observationVoice: Partial<Record<ObservationReasonCode, string>> = {
+  missing_points: 'Уберите перекрытия.',
+  no_pose: 'Вернитесь в кадр.',
+};
+
+function observationCue(analysis: ExerciseAnalysisResult, message: string): CoachingCue {
+  const code = analysis.observation.reasons[0]?.code;
+  const voiceMessage = code ? observationVoice[code] : undefined;
+  return { key: `observation:${code ?? analysis.preparation.view}`, kind: 'observation', message, voiceMessage };
+}
 
 function phaseCue(exercise: ExerciseType, analysis: ExerciseAnalysisResult): CoachingCue {
   const messages: Partial<Record<ExerciseAnalysisResult['state'], string>> = {
@@ -45,7 +57,9 @@ export class CoachingController {
   constructor(private readonly exercise: ExerciseType) {}
   update(analysis: ExerciseAnalysisResult, points: PoseLandmarks, aspect: number, now: number): CoachingCue {
     if (!isLegacy(this.exercise)) {
-      if (analysis.observation.status !== 'ready'||analysis.state==='Оценка приостановлена') return { key:'observation', kind:'observation', message:analysis.preparation.message };
+      if (analysis.observation.status !== 'ready' || analysis.state === 'Оценка приостановлена') {
+        return observationCue(analysis, analysis.preparation.message);
+      }
       return { key:analysis.feedback[0]?.message??analysis.state,kind:analysis.feedback.length?'technique':'phase',message:analysis.feedback[0]?.message||analysis.preparation.message };
     }
     if (this.lastAt !== null && (now < this.lastAt || now - this.lastAt > 700)) this.reset();
@@ -65,7 +79,7 @@ export class CoachingController {
         ? '' : reason.code === 'source_unavailable'
           ? ' Возобновите видео или проверьте подключение камеры.'
           : ' Проверьте свет и кадр, затем удерживайте исходную позицию.';
-      return { key: `observation:${reason?.code ?? analysis.preparation.view}`, kind: 'observation', message: message + action };
+      return observationCue(analysis, message + action);
     }
     if (analysis.preparation.stage !== 'active') return phaseCue(this.exercise, analysis);
     const code = this.exercise === 'squat' ? 'lean' : 'line';

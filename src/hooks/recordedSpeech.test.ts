@@ -25,7 +25,7 @@ afterEach(() => vi.useRealTimers());
 describe('Xenia recording catalog', () => {
   it('maps every source phrase to its supplied Xenia WAV, including shortened recordings', () => {
     expect(manifest.speaker).toBe('xenia');
-    expect(phrases).toHaveLength(28);
+    expect(manifest.phrases).toHaveLength(phrases.length);
     expect(new Set(phrases.map(phrase => phrase.sourceText)).size).toBe(phrases.length);
     for (const phrase of phrases) {
       const entry = manifest.phrases.find(entry => entry.id === phrase.id)!;
